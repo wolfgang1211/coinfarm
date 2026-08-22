@@ -136,8 +136,20 @@ export default function Home() {
       if (!s) return s;
       const cost = n === 1 ? upgradeCost(id, s.upgrades[id]) : bulkCost(id, s.upgrades[id], n);
       if (s.coins < cost) return s;
-      return { ...s, coins: s.coins - cost, upgrades: { ...s.upgrades, [id]: s.upgrades[id] + n } };
+      const newOwned = s.upgrades[id] + n;
+      // milestone celebration: crossed a 25-boundary
+      const before = Math.floor(s.upgrades[id] / 25);
+      const after = Math.floor(newOwned / 25);
+      let milestoneMsg: string | null = null;
+      if (after > before) {
+        const def = UPGRADE_DEFS.find((d) => d.id === id)!;
+        milestoneMsg = `🌟 MILESTONE! ${def.name} output x${Math.pow(2, after)}!`;
+        setTimeout(() => sfx.achievement(), 50);
+      }
+      if (milestoneMsg) pushToast(milestoneMsg);
+      return { ...s, coins: s.coins - cost, upgrades: { ...s.upgrades, [id]: newOwned } };
     });
+    sfx.buy();
   };
 
   const buyClickLevel = () => {
@@ -314,7 +326,7 @@ export default function Home() {
 
       {/* balance */}
       <div className={`mt-3 rounded-lg border bg-zinc-900 p-4 text-center transition-colors ${boosted ? "border-yellow-500/60" : "border-zinc-800"}`}>
-        <div className="text-3xl font-bold">{fmtNum(state.coins)} $FARM</div>
+        <div className="text-3xl font-bold animate-coinglow">{fmtNum(state.coins)} $FARM</div>
         {boosted && <div className="text-xs text-yellow-400 animate-pulse">⚡ SURGE x{state.boostMult} active</div>}
         <div className={`mt-1 text-sm ${state.priceHistory.length > 1 && state.price >= state.priceHistory[state.priceHistory.length - 2] ? "text-green-400" : "text-red-400"}`}>
           ${state.price.toFixed(3)}

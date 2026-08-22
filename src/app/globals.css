@@ -32,3 +32,21 @@ body {
 .animate-floatup {
   animation: floatup 1s ease-out forwards;
 }
+
+@keyframes milestoneburst {
+  0% { transform: scale(0.3); opacity: 0; }
+  40% { transform: scale(1.15); opacity: 1; }
+  80% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.animate-milestoneburst {
+  animation: milestoneburst 2.5s ease-out forwards;
+}
+
+@keyframes coinglow {
+  0%, 100% { text-shadow: none; }
+  50% { text-shadow: 0 0 18px rgba(52, 211, 153, 0.8); }
+}
+.animate-coinglow {
+  animation: coinglow 2s ease-in-out infinite;
+}
