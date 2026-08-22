@@ -230,7 +230,7 @@ export default function Home() {
       const res = await fetch("/api/leaderboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: playerName.trim(), totalMined: Math.floor(s.totalMined), prestiges: s.prestiges, achievements: s.achievements.length }),
+        body: JSON.stringify({ name: playerName.trim(), totalMined: Math.floor(s.totalMined), prestiges: s.prestiges, achievements: s.achievements, createdAt: s.createdAt }),
       });
       const data = await res.json();
       if (data.ok) pushToast(`📡 Score submitted! Rank #${data.rank}`);
