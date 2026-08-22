@@ -43,6 +43,7 @@ export default function Home() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [lbEntries, setLbEntries] = useState<{ name: string; totalMined: number; prestiges: number; achievements: number; rank?: number }[] | null>(null);
   const [playerName, setPlayerName] = useState("");
+  const [showStats, setShowStats] = useState(false);
   const stateRef = useRef(state);
   stateRef.current = state;
   const mineBtnRef = useRef<HTMLButtonElement>(null);
@@ -209,6 +210,29 @@ export default function Home() {
       pushToast("🧪 Research complete!");
       return { ...s, prestigePoints: s.prestigePoints - cost, perks: { ...s.perks, [id]: lvl + 1 } };
     });
+  };
+
+  // keyboard shortcut: space mines (when no input focused)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !(e.target instanceof HTMLInputElement)) {
+        e.preventDefault();
+        doMine();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const shareScore = async () => {
+    const s = stateRef.current;
+    if (!s) return;
+    const text = `⛏ I've mined ${fmtNum(s.totalMined)} $FARM (${s.prestiges} prestiges, ${s.achievements.length} achievements) in CoinFarm! Can you beat me?`;
+    const url = "https://coinfarm.vercel.app";
+    if (navigator.share) {
+      try { await navigator.share({ text, url }); return; } catch {}
+    }
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text + " " + url)}`, "_blank");
   };
 
   const openLeaderboard = async () => {
@@ -403,8 +427,15 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="mt-4 mb-8 text-center text-xs text-zinc-600">
-        lifetime {fmtNum(state.totalMined)} · clicks {fmtNum(state.clicksTotal)} · goldens {state.goldensClicked} · prestiges {state.prestiges}
+      <div className="mt-4 mb-8">
+        <div className="flex justify-center gap-2 mb-3 text-xs">
+          <button onClick={() => setShowStats(true)} className="border border-zinc-700 rounded px-2 py-1 hover:border-emerald-500">📊 Stats</button>
+          <button onClick={shareScore} className="border border-zinc-700 rounded px-2 py-1 hover:border-sky-500">🐦 Share</button>
+        </div>
+        <div className="text-center text-xs text-zinc-600">
+          lifetime {fmtNum(state.totalMined)} · clicks {fmtNum(state.clicksTotal)} · goldens {state.goldensClicked} · prestiges {state.prestiges}
+          <span className="block mt-0.5">space = mine</span>
+        </div>
       </div>
 
       {/* daily bonus */}
@@ -437,6 +468,37 @@ export default function Home() {
             <div className="font-bold mb-1">🌙 Welcome back!</div>
             {offlineReport}
             <button onClick={() => setOfflineReport(null)} className="mt-3 w-full rounded bg-emerald-600 py-1.5 hover:bg-emerald-500">Collect</button>
+          </div>
+        </div>
+      )}
+
+      {/* stats panel */}
+      {showStats && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowStats(false)}>
+          <div className="rounded-t-xl sm:rounded-lg border border-zinc-700 bg-zinc-900 p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <div className="font-bold">📊 Miner Statistics</div>
+              <button onClick={() => setShowStats(false)} className="text-zinc-400">✕</button>
+            </div>
+            {[
+              ["Lifetime mined", `${fmtNum(state.totalMined)} $FARM`],
+              ["This run", `${fmtNum(state.runMined)} $FARM`],
+              ["Portfolio value", `$${fmtNum((state.coins + state.stakedAmount) * state.price + (state.usdCash ?? 0))}`],
+              ["USD cash", `$${(state.usdCash ?? 0).toFixed(2)}`],
+              ["Best portfolio", `$${fmtNum(state.bestPortfolioValue)}`],
+              ["Total clicks", fmtNum(state.clicksTotal)],
+              ["Critical hits", fmtNum(state.critCount)],
+              ["Golden events", String(state.goldensClicked)],
+              ["Prestiges", String(state.prestiges)],
+              ["Achievements", `${state.achievements.length}/${ACHIEVEMENTS.length}`],
+              ["Daily streak", `${state.dailyStreak ?? 0} days`],
+              ["Passive rate", `${fmtNum(passiveRate(state))}/s`],
+              ["Playing since", new Date(state.createdAt).toLocaleDateString()],
+            ].map(([k, v]) => (
+              <div key={k} className="flex justify-between py-1.5 border-b border-zinc-800 last:border-0 text-sm">
+                <span className="text-zinc-400">{k}</span><span>{v}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
