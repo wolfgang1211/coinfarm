@@ -40,6 +40,9 @@ export default function Home() {
   const [dailyClaimable, setDailyClaimable] = useState(false);
   const [showPerks, setShowPerks] = useState(false);
   const [muteState, setMuteState] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [lbEntries, setLbEntries] = useState<{ name: string; totalMined: number; prestiges: number; achievements: number; rank?: number }[] | null>(null);
+  const [playerName, setPlayerName] = useState("");
   const stateRef = useRef(state);
   stateRef.current = state;
   const mineBtnRef = useRef<HTMLButtonElement>(null);
@@ -208,6 +211,34 @@ export default function Home() {
     });
   };
 
+  const openLeaderboard = async () => {
+    setShowLeaderboard(true);
+    try {
+      const savedName = localStorage.getItem("coinfarm-name") ?? "";
+      setPlayerName(savedName);
+      const res = await fetch("/api/leaderboard");
+      const data = await res.json();
+      setLbEntries(data.top ?? []);
+    } catch { setLbEntries([]); }
+  };
+
+  const submitScore = async () => {
+    const s = stateRef.current;
+    if (!s || !playerName.trim()) return;
+    localStorage.setItem("coinfarm-name", playerName.trim());
+    try {
+      const res = await fetch("/api/leaderboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: playerName.trim(), totalMined: Math.floor(s.totalMined), prestiges: s.prestiges, achievements: s.achievements.length }),
+      });
+      const data = await res.json();
+      if (data.ok) pushToast(`📡 Score submitted! Rank #${data.rank}`);
+      else pushToast(`❌ ${data.error}`);
+      openLeaderboard();
+    } catch { pushToast("❌ Submit failed"); }
+  };
+
   // chart
   const chart = (() => {
     if (!state || state.priceHistory.length < 2) return null;
@@ -245,6 +276,9 @@ export default function Home() {
         </button>
         <button onClick={() => setShowPerks(!showPerks)} className="ml-1 text-sm border border-purple-700 rounded px-2 py-1 hover:border-purple-400">
           🧪 {state.prestigePoints} PP
+        </button>
+        <button onClick={openLeaderboard} className="ml-1 text-sm border border-sky-700 rounded px-2 py-1 hover:border-sky-400">
+          📡 Top
         </button>
         <button
           onClick={() => { const m = !isMuted(); setMuted(m); setMuteState(m); }}
@@ -403,6 +437,38 @@ export default function Home() {
             <div className="font-bold mb-1">🌙 Welcome back!</div>
             {offlineReport}
             <button onClick={() => setOfflineReport(null)} className="mt-3 w-full rounded bg-emerald-600 py-1.5 hover:bg-emerald-500">Collect</button>
+          </div>
+        </div>
+      )}
+
+      {/* leaderboard panel */}
+      {showLeaderboard && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowLeaderboard(false)}>
+          <div className="rounded-t-xl sm:rounded-lg border border-sky-700 bg-zinc-900 p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <div className="font-bold">📡 Global Leaderboard</div>
+              <button onClick={() => setShowLeaderboard(false)} className="text-zinc-400">✕</button>
+            </div>
+            <div className="flex gap-2 mb-3">
+              <input value={playerName} onChange={(e) => setPlayerName(e.target.value)} placeholder="your miner name" maxLength={20}
+                className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm outline-none focus:border-sky-500" />
+              <button onClick={submitScore} disabled={!playerName.trim()} className="rounded bg-sky-600/80 px-3 py-1 text-sm hover:bg-sky-600 disabled:opacity-30">Submit</button>
+            </div>
+            {lbEntries === null ? (
+              <div className="text-sm text-zinc-500 py-4 text-center">loading…</div>
+            ) : lbEntries.length === 0 ? (
+              <div className="text-sm text-zinc-500 py-4 text-center">No entries yet — be the first whale 🐋</div>
+            ) : (
+              lbEntries.map((e, i) => {
+                const isYou = e.name === playerName.trim();
+                return (
+                  <div key={e.name} className={`flex justify-between py-1.5 border-b border-zinc-800 last:border-0 text-sm ${isYou ? "text-emerald-400 font-bold" : ""}`}>
+                    <span>#{i + 1} {e.name} {isYou && "(you)"}</span>
+                    <span className="text-zinc-400">{fmtNum(e.totalMined)} · P{e.prestiges}</span>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}
