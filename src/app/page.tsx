@@ -9,6 +9,9 @@ import {
   ACHIEVEMENTS, UPGRADE_DEFS, UpgradeId, STAKE_APY, fmtNum, GoldenKind,
 } from "@/lib/game";
 import { executeTrade, checkDailyBonus, dailyAvailable, fmtShort } from "@/lib/wave2";
+import { PERKS, perkCost, PerkId } from "@/lib/perks";
+import { effectiveApy, offlineCap } from "@/lib/game";
+import { sfx, setMuted, isMuted } from "@/lib/sfx";
 
 const SAVE_KEY = "coinfarm-save-v2";
 
@@ -35,6 +38,8 @@ export default function Home() {
   const [offlineReport, setOfflineReport] = useState<string | null>(null);
   const [tradeAmount, setTradeAmount] = useState("");
   const [dailyClaimable, setDailyClaimable] = useState(false);
+  const [showPerks, setShowPerks] = useState(false);
+  const [muteState, setMuteState] = useState(false);
   const stateRef = useRef(state);
   stateRef.current = state;
   const mineBtnRef = useRef<HTMLButtonElement>(null);
@@ -76,6 +81,7 @@ export default function Home() {
             const def = ACHIEVEMENTS.find((a) => a.id === id);
             if (def) pushToast(`🏆 ${def.name} — ${def.desc} (+1% global)`);
           }
+          sfx.achievement();
         }
         return { ...next };
       });
@@ -107,6 +113,7 @@ export default function Home() {
     let v = clickValue(state);
     if (crit) v *= CRIT_MULT;
     setState((s) => s ? { ...s, coins: s.coins + v, totalMined: s.totalMined + v, runMined: s.runMined + v, clicksTotal: s.clicksTotal + 1, critCount: s.critCount + (crit ? 1 : 0) } : s);
+    if (crit) sfx.crit(); else sfx.click();
     addFloat(`+${fmtNum(v)}${crit ? " CRIT!" : ""}`, crit);
   };
 
@@ -116,6 +123,7 @@ export default function Home() {
     const kind = pickGoldenKind();
     const { state: next, message } = applyGolden(state, kind);
     setState(next);
+    sfx.golden();
     pushToast(message);
   };
 
@@ -190,6 +198,16 @@ export default function Home() {
     });
   };
 
+  const buyPerk = (id: PerkId, maxLevel: number, cost: number) => {
+    setState((s) => {
+      if (!s) return s;
+      const lvl = s.perks[id] ?? 0;
+      if (lvl >= maxLevel || s.prestigePoints < cost) return s;
+      pushToast("🧪 Research complete!");
+      return { ...s, prestigePoints: s.prestigePoints - cost, perks: { ...s.perks, [id]: lvl + 1 } };
+    });
+  };
+
   // chart
   const chart = (() => {
     if (!state || state.priceHistory.length < 2) return null;
@@ -224,6 +242,15 @@ export default function Home() {
         </h1>
         <button onClick={() => setShowAchievements(!showAchievements)} className="text-sm border border-zinc-700 rounded px-2 py-1 hover:border-emerald-500">
           🏆 {state.achievements.length}/{ACHIEVEMENTS.length}
+        </button>
+        <button onClick={() => setShowPerks(!showPerks)} className="ml-1 text-sm border border-purple-700 rounded px-2 py-1 hover:border-purple-400">
+          🧪 {state.prestigePoints} PP
+        </button>
+        <button
+          onClick={() => { const m = !isMuted(); setMuted(m); setMuteState(m); }}
+          className="ml-1 text-sm border border-zinc-700 rounded px-2 py-1 hover:border-zinc-500"
+        >
+          {muteState ? "🔇" : "🔊"}
         </button>
       </div>
 
@@ -376,6 +403,43 @@ export default function Home() {
             <div className="font-bold mb-1">🌙 Welcome back!</div>
             {offlineReport}
             <button onClick={() => setOfflineReport(null)} className="mt-3 w-full rounded bg-emerald-600 py-1.5 hover:bg-emerald-500">Collect</button>
+          </div>
+        </div>
+      )}
+
+      {/* perks / research panel */}
+      {showPerks && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowPerks(false)}>
+          <div className="rounded-t-xl sm:rounded-lg border border-purple-700 bg-zinc-900 p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <div className="font-bold">🧪 Research Lab — {state.prestigePoints} PP available</div>
+              <button onClick={() => setShowPerks(false)} className="text-zinc-400">✕</button>
+            </div>
+            <p className="text-xs text-zinc-500 mb-2">Spend prestige points on permanent upgrades. Survives prestige resets.</p>
+            {PERKS.map((p) => {
+              const lvl = state.perks[p.id] ?? 0;
+              const maxed = lvl >= p.maxLevel;
+              const cost = maxed ? 0 : perkCost(p, lvl);
+              const afford = !maxed && state.prestigePoints >= cost;
+              return (
+                <div key={p.id} className={`py-2 border-b border-zinc-800 last:border-0 flex items-center justify-between ${maxed ? "opacity-60" : ""}`}>
+                  <div>
+                    <div className="text-sm">{p.icon} <b>{p.name}</b> <span className="text-zinc-500">Lv.{lvl}/{p.maxLevel}</span></div>
+                    <div className="text-xs text-zinc-500">{p.desc}</div>
+                  </div>
+                  <button
+                    onClick={() => buyPerk(p.id, p.maxLevel, cost)}
+                    disabled={maxed || !afford}
+                    className={`ml-3 shrink-0 rounded px-3 py-1 text-sm ${maxed ? "border border-zinc-700 text-zinc-500" : "bg-purple-600/80 enabled:hover:bg-purple-600 disabled:opacity-30"}`}
+                  >
+                    {maxed ? "MAX" : `${cost} PP`}
+                  </button>
+                </div>
+              );
+            })}
+            <div className="mt-2 text-xs text-zinc-500">
+              Current: APY {(effectiveApy(state) * 100).toFixed(0)}% · offline cap {Math.round(offlineCap(state) / 3600000)}h
+            </div>
           </div>
         </div>
       )}

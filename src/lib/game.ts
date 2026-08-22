@@ -19,6 +19,7 @@ export interface GameState {
   // prestige
   prestigePoints: number;      // permanent multiplier currency
   prestiges: number;
+  perks: Partial<Record<import("./perks").PerkId, number>>;
   // session juice
   clicksTotal: number;
   critCount: number;
@@ -44,6 +45,9 @@ export interface GameState {
   createdAt: number;
 }
 
+import type { PerkId } from "./perks";
+import { clickPerkMult, idlePerkMult, critChance as perkCrit, stakeApy as perkApy, offlineCapMs as perkCap, goldenFreqDivisor, perkLevels } from "./perks";
+
 export const TICK_MS = 1000;
 
 export function newGame(): GameState {
@@ -60,6 +64,7 @@ export function newGame(): GameState {
     priceHistory: [1],
     prestigePoints: 0,
     prestiges: 0,
+    perks: {},
     clicksTotal: 0,
     critCount: 0,
     goldensClicked: 0,
@@ -80,8 +85,17 @@ export function newGame(): GameState {
   };
 }
 
-export const OFFLINE_CAP_MS = 8 * 3600 * 1000; // 8h cap
+export const OFFLINE_CAP_MS = 8 * 3600 * 1000; // base; perk ile artar
+export function offlineCap(s: GameState): number {
+  return perkCap(perkLevels(s, "offline-cap"));
+}
 export const GOLDEN_SPAWN_MIN_MS = 45_000;
+export function goldenSpawnMin(s: GameState): number {
+  return GOLDEN_SPAWN_MIN_MS * goldenFreqDivisor(perkLevels(s, "golden-freq"));
+}
+export function goldenSpawnVar(s: GameState): number {
+  return GOLDEN_SPAWN_VAR_MS * goldenFreqDivisor(perkLevels(s, "golden-freq"));
+}
 export const GOLDEN_SPAWN_VAR_MS = 75_000;
 
 // ---- Prestige ----
@@ -94,7 +108,7 @@ export function prestigeGain(s: GameState): number {
 }
 
 export function globalMult(s: GameState): number {
-  return 1 + s.prestigePoints * 0.06; // +6% per point
+  return (1 + s.prestigePoints * 0.06) * idlePerkMult(perkLevels(s, "idle-power"));
 }
 
 export function doPrestige(s: GameState): GameState | null {
@@ -109,6 +123,7 @@ export function doPrestige(s: GameState): GameState | null {
     bestPortfolioValue: s.bestPortfolioValue,
     prestigePoints: s.prestigePoints + gain,
     prestiges: s.prestiges + 1,
+    perks: { ...s.perks },
     achievements: [...s.achievements],
     price: s.price,
     priceHistory: s.priceHistory.slice(-60),
@@ -167,13 +182,17 @@ export function isFrenzy(s: GameState): boolean {
 export function clickValue(s: GameState): number {
   // quadratic growth in level, plus small idle synergy
   const base = 1 + (s.perClickLevel - 1) * (2 + s.perClickLevel * 0.5) + passiveRate(s) * 0.05;
-  let v = base * globalMult(s);
+  let v = base * globalMult(s) * clickPerkMult(perkLevels(s, "click-power"));
   if (isFrenzy(s)) v *= s.frenzyMult;
   return Math.max(1, Math.floor(v));
 }
 
-export function rollCrit(): boolean {
-  return Math.random() < 0.05; // 5% crit
+export function rollCrit(s?: GameState): boolean {
+  const chance = s ? perkCrit(perkLevels(s, "crit-chance")) : 0.05;
+  return Math.random() < chance;
+}
+export function critMultiplier(): number {
+  return CRIT_MULT;
 }
 export const CRIT_MULT = 7;
 
@@ -182,12 +201,15 @@ export function upgradeClickCost(level: number): number {
 }
 
 // ---- Staking ----
-export const STAKE_APY = 0.25;
+export const STAKE_APY = 0.25; // base; perk ile artar
+export function effectiveApy(s: GameState): number {
+  return perkApy(perkLevels(s, "stake-boost"));
+}
 
 export function stakeRewards(s: GameState, now = Date.now()): number {
   if (s.stakedAmount <= 0) return s.pendingRewards;
   const secs = (now - s.stakeStartTime) / 1000;
-  const earned = ((s.stakedAmount * STAKE_APY) / (365 * 24 * 3600)) * secs;
+  const earned = ((s.stakedAmount * effectiveApy(s)) / (365 * 24 * 3600)) * secs;
   return s.pendingRewards + earned;
 }
 
@@ -199,7 +221,7 @@ export interface GoldenEvent {
 }
 
 export function shouldSpawnGolden(s: GameState, now = Date.now()): boolean {
-  return now - s.lastGoldenSpawn > GOLDEN_SPAWN_MIN_MS + Math.random() * GOLDEN_SPAWN_VAR_MS;
+  return now - s.lastGoldenSpawn > goldenSpawnMin(s) + Math.random() * goldenSpawnVar(s);
 }
 
 export function applyGolden(s: GameState, kind: GoldenKind): { state: GameState; message: string } {
@@ -289,7 +311,7 @@ export function tick(s: GameState, now = Date.now()): TickResult {
   const rawElapsed = Math.max(0, now - s.lastTick);
   if (rawElapsed < 200) return { state: s, offlineMs: 0 };
 
-  const cappedElapsed = Math.min(rawElapsed, OFFLINE_CAP_MS);
+  const cappedElapsed = Math.min(rawElapsed, offlineCap(s));
   const steps = Math.floor(cappedElapsed / TICK_MS);
 
   // offline (no tab open) earns at 50% efficiency
@@ -313,7 +335,7 @@ export function tick(s: GameState, now = Date.now()): TickResult {
   let stakeStartTime = s.stakeStartTime;
   if (s.stakedAmount > 0) {
     const secs = cappedElapsed / 1000;
-    pendingRewards += ((s.stakedAmount * STAKE_APY) / (365 * 24 * 3600)) * secs;
+    pendingRewards += ((s.stakedAmount * effectiveApy(s)) / (365 * 24 * 3600)) * secs;
     stakeStartTime = now;
   }
 
