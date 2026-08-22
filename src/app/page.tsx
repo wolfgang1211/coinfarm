@@ -303,11 +303,16 @@ export default function Home() {
   const boosted = Date.now() < state.boostUntil;
 
   return (
-    <main className="relative min-h-screen bg-zinc-950 text-zinc-100 p-4 max-w-md mx-auto font-mono select-none overflow-hidden">
+    <main className="relative min-h-screen app-bg text-zinc-100 p-4 max-w-md mx-auto font-mono select-none overflow-hidden">
+      {/* ambient orbs */}
+      <div className="orb w-64 h-64 bg-emerald-500/15" style={{ top: "-40px", left: "-60px" }} />
+      <div className="orb w-52 h-52 bg-violet-500/12" style={{ top: "30%", right: "-70px", animationDelay: "-4s" }} />
+      <div className="orb w-56 h-56 bg-amber-500/10" style={{ bottom: "5%", left: "-50px", animationDelay: "-8s" }} />
+
       {/* header */}
-      <div className="flex justify-between items-center">
+      <div className="relative flex justify-between items-center">
         <h1 className="text-xl font-bold tracking-tight">
-          ⛏ CoinFarm <span className="text-xs text-zinc-500">idle miner</span>
+          <span className="pick-swing mr-0.5">⛏</span> Coin<span className="text-emerald-400">Farm</span> <span className="text-xs text-zinc-500 font-normal">idle miner</span>
         </h1>
         <button onClick={() => setShowAchievements(!showAchievements)} className="text-sm border border-zinc-700 rounded px-2 py-1 hover:border-emerald-500">
           🏆 {state.achievements.length}/{ACHIEVEMENTS.length}
@@ -327,8 +332,10 @@ export default function Home() {
       </div>
 
       {/* balance */}
-      <div className={`mt-3 rounded-lg border bg-zinc-900 p-4 text-center transition-colors ${boosted ? "border-yellow-500/60" : "border-zinc-800"}`}>
-        <div className="text-3xl font-bold animate-coinglow">{fmtNum(state.coins)} $FARM</div>
+      <div className={`relative panel mt-3 rounded-xl p-4 text-center transition-colors ${boosted ? "border-yellow-500/60" : ""}`}>
+        <div className="text-3xl font-bold animate-coinglow">
+          <span className="mr-1">🪙</span>{fmtNum(state.coins)} <span className="text-emerald-400">$FARM</span>
+        </div>
         {boosted && <div className="text-xs text-yellow-400 animate-pulse">⚡ SURGE x{state.boostMult} active</div>}
         <div className={`mt-1 text-sm ${state.priceHistory.length > 1 && state.price >= state.priceHistory[state.priceHistory.length - 2] ? "text-green-400" : "text-red-400"}`}>
           ${state.price.toFixed(3)}
@@ -351,12 +358,10 @@ export default function Home() {
       <button
         ref={mineBtnRef}
         onClick={doMine}
-        className={`mt-3 w-full rounded-lg border py-4 text-lg font-bold transition-colors ${
-          frenzy ? "border-red-500 bg-red-600/25 hover:bg-red-600/40 active:bg-red-600/50" : "border-emerald-700 bg-emerald-600/20 hover:bg-emerald-600/30 active:bg-emerald-600/40"
-        }`}
+        className={`mine-btn ${frenzy ? "mine-btn-frenzy" : ""} relative overflow-hidden sheen mt-3 w-full rounded-xl py-4 text-lg font-bold`}
       >
-        ⛏ MINE +{fmtNum(clickValue(state))}
-        <span className="block text-[10px] text-zinc-400 font-normal">5% chance of 7x critical hit</span>
+        <span className="pick-swing inline-block mr-1">⛏</span> MINE +{fmtNum(clickValue(state))}
+        <span className="block text-[10px] text-emerald-200/60 font-normal">5% chance of 7× critical hit</span>
       </button>
 
       {/* floating numbers */}
@@ -387,22 +392,22 @@ export default function Home() {
             const toNextMilestone = 25 - (owned % 25);
             const share = (contributions[idx] / total) * 100;
             return (
-              <div key={def.id} className={`rounded-lg border p-3 ${afford ? "border-zinc-700" : "border-zinc-800 opacity-40"}`}>
+              <div key={def.id} className={`gen-card card-${def.id} rounded-xl p-3 ${afford ? "affordable" : "opacity-50"}`}>
                 <div className="flex justify-between items-center">
                   <div>
-                    <div className="font-bold">{def.icon} {def.name}</div>
+                    <div className="font-bold" style={{ color: `rgb(var(--accent))` }}>{def.icon} {def.name}</div>
                     <div className="text-xs text-zinc-500">
                       owned {owned} · {fmtNum(def.rate * Math.pow(2, Math.floor(owned / 25)))}/s each · milestone in {toNextMilestone}
                     </div>
                   </div>
                   <div className="flex gap-1">
-                    <button onClick={() => buyUpgrade(def.id, 1)} disabled={!afford} className="rounded bg-zinc-800 px-2 py-1 text-sm enabled:hover:bg-zinc-700">{fmtNum(cost)} 🪙</button>
+                    <button onClick={() => buyUpgrade(def.id, 1)} disabled={!afford} className="rounded bg-zinc-800/90 px-2 py-1 text-sm enabled:hover:bg-zinc-700">{fmtNum(cost)} 🪙</button>
                     <button onClick={() => buyUpgrade(def.id, 10)} disabled={state.coins < bulkCost(def.id, owned, 10)} className="rounded border border-zinc-600 px-2 py-1 text-sm enabled:hover:border-emerald-500">x10</button>
                   </div>
                 </div>
                 {/* production share bar */}
-                <div className="mt-2 h-1.5 rounded bg-zinc-800 overflow-hidden">
-                  <div className="h-full bg-emerald-600/70" style={{ width: `${share}%` }} />
+                <div className="mt-2 h-1.5 rounded bg-zinc-800/80 overflow-hidden">
+                  <div className="share-bar h-full rounded-full transition-all duration-500" style={{ width: `${share}%` }} />
                 </div>
                 <div className="mt-0.5 text-[10px] text-zinc-600">{share.toFixed(0)}% of your hashpower</div>
               </div>
@@ -412,7 +417,7 @@ export default function Home() {
       </div>
 
       {/* market trading */}
-      <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+      <div className="panel mt-4 rounded-xl p-4">
         <div className="flex justify-between">
           <span className="font-bold">📈 Market</span>
           <span className="text-xs text-zinc-500">cash: ${(state.usdCash ?? 0).toFixed(2)} · 1% fee</span>
@@ -427,7 +432,7 @@ export default function Home() {
       </div>
 
       {/* staking */}
-      <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+      <div className="panel mt-4 rounded-xl p-4">
         <div className="flex justify-between"><span className="font-bold">🏦 Staking</span><span className="text-xs text-zinc-500">{(STAKE_APY * 100).toFixed(0)}% APR</span></div>
         <div className="mt-2 text-sm">staked: <b>{fmtNum(state.stakedAmount)}</b> $FARM</div>
         <div className="text-sm text-emerald-400">rewards: {fmtNum(stakeRewards(state))}</div>
@@ -476,7 +481,7 @@ export default function Home() {
       {golden && (
         <button onClick={clickGolden}
           style={{ left: `${golden.x}%`, top: `${golden.y}%` }}
-          className="fixed z-40 w-12 h-12 rounded-full bg-gradient-to-br from-yellow-200 to-yellow-500 shadow-[0_0_24px_rgba(250,204,21,0.8)] flex items-center justify-center text-xl animate-bounce">
+          className="golden-coin fixed z-40 w-14 h-14 rounded-full flex items-center justify-center text-2xl">
           💰
         </button>
       )}
@@ -502,7 +507,7 @@ export default function Home() {
       {/* stats panel */}
       {showStats && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowStats(false)}>
-          <div className="rounded-t-xl sm:rounded-lg border border-zinc-700 bg-zinc-900 p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="rounded-t-xl sm:rounded-lg panel rounded-t-xl sm:rounded-xl p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-3">
               <div className="font-bold">📊 Miner Statistics</div>
               <button onClick={() => setShowStats(false)} className="text-zinc-400">✕</button>
@@ -533,7 +538,7 @@ export default function Home() {
       {/* leaderboard panel */}
       {showLeaderboard && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowLeaderboard(false)}>
-          <div className="rounded-t-xl sm:rounded-lg border border-sky-700 bg-zinc-900 p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="panel !border-sky-700/60 rounded-t-xl sm:rounded-xl p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
               <div className="font-bold">📡 Leaderboard</div>
               <button onClick={() => setShowLeaderboard(false)} className="text-zinc-400">✕</button>
@@ -573,7 +578,7 @@ export default function Home() {
       {/* perks / research panel */}
       {showPerks && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowPerks(false)}>
-          <div className="rounded-t-xl sm:rounded-lg border border-purple-700 bg-zinc-900 p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="panel !border-purple-700/60 rounded-t-xl sm:rounded-xl p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
               <div className="font-bold">🧪 Research Lab — {state.prestigePoints} PP available</div>
               <button onClick={() => setShowPerks(false)} className="text-zinc-400">✕</button>
@@ -610,7 +615,7 @@ export default function Home() {
       {/* achievements panel */}
       {showAchievements && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowAchievements(false)}>
-          <div className="rounded-t-xl sm:rounded-lg border border-zinc-700 bg-zinc-900 p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="rounded-t-xl sm:rounded-lg panel rounded-t-xl sm:rounded-xl p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
               <div className="font-bold">🏆 Achievements (+1% each)</div>
               <button onClick={() => setShowAchievements(false)} className="text-zinc-400">✕</button>
