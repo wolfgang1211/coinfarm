@@ -77,7 +77,7 @@ export default function Home() {
         setDailyClaimable(dailyAvailable(next));
         // golden spawn check
         if (!golden && shouldSpawnGolden(next)) {
-          setGolden({ x: 10 + Math.random() * 80, y: 15 + Math.random() * 70 });
+          setGolden({ x: 8 + Math.random() * 70, y: 15 + Math.random() * 70 });
           next.lastGoldenSpawn = Date.now();
         }
         // achievements check
@@ -304,16 +304,19 @@ export default function Home() {
   const boosted = Date.now() < state.boostUntil;
 
   return (
-    <main className="relative min-h-screen app-bg text-zinc-100 p-4 max-w-md mx-auto font-mono select-none overflow-hidden">
-      {/* ambient orbs */}
-      <div className="orb w-64 h-64 bg-emerald-500/15" style={{ top: "-40px", left: "-60px" }} />
-      <div className="orb w-52 h-52 bg-violet-500/12" style={{ top: "30%", right: "-70px", animationDelay: "-4s" }} />
-      <div className="orb w-56 h-56 bg-amber-500/10" style={{ bottom: "5%", left: "-50px", animationDelay: "-8s" }} />
+    <main className="relative min-h-screen app-bg text-zinc-100 p-4 max-w-md mx-auto font-mono select-none overflow-x-hidden">
+      {/* ambient orbs — fixed layer, no layout impact */}
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <div className="orb w-64 h-64 bg-emerald-500/15" style={{ top: "-40px", left: "-60px" }} />
+        <div className="orb w-52 h-52 bg-violet-500/12" style={{ top: "30%", right: "-70px", animationDelay: "-4s" }} />
+        <div className="orb w-56 h-56 bg-amber-500/10" style={{ bottom: "5%", left: "-50px", animationDelay: "-8s" }} />
+      </div>
+      <div className="relative z-10">
 
       {/* header */}
       <div className="relative flex justify-between items-center">
         <h1 className="text-xl font-bold tracking-tight">
-          <span className="pick-swing mr-0.5">⛏</span> Coin<span className="text-emerald-400">Farm</span> <span className="text-xs text-zinc-500 font-normal">idle miner</span>
+          <span className="pick-swing mr-0.5">⛏</span> Coin<span className="text-emerald-400">Farm</span> <span className="text-xs text-zinc-400 font-normal">idle miner</span>
         </h1>
         <button onClick={() => setShowAchievements(!showAchievements)} className="text-sm border border-zinc-700 rounded px-2 py-1 hover:border-emerald-500">
           🏆 {state.achievements.length}/{ACHIEVEMENTS.length}
@@ -342,7 +345,7 @@ export default function Home() {
           ${state.price.toFixed(3)}
         </div>
         {chart}
-        <div className="mt-1 text-xs text-zinc-500">
+        <div className="mt-1 text-xs text-zinc-400">
           portfolio ≈ ${fmtNum((state.coins + state.stakedAmount) * state.price)} · passive {fmtNum(passiveRate(state))}/s
         </div>
       </div>
@@ -403,7 +406,7 @@ export default function Home() {
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="font-bold text-sm" style={{ color: `rgb(var(--accent))` }}>{def.name}</div>
-                        <div className="text-xs text-zinc-500">
+                        <div className="text-xs text-zinc-400">
                           owned {owned} · {fmtNum(def.rate * Math.pow(2, Math.floor(owned / 25)))}/s ea · milestone -{toNextMilestone}
                         </div>
                       </div>
@@ -416,7 +419,7 @@ export default function Home() {
                     <div className="mt-1.5 h-1.5 rounded bg-zinc-800/80 overflow-hidden">
                       <div className="share-bar h-full rounded-full transition-all duration-500" style={{ width: `${share}%` }} />
                     </div>
-                    <div className="mt-0.5 text-[10px] text-zinc-600">{share.toFixed(0)}% of your hashpower</div>
+                    <div className="mt-0.5 text-[10px] text-zinc-400">{share.toFixed(0)}% of your hashpower</div>
                   </div>
                 </div>
               </div>
@@ -429,9 +432,9 @@ export default function Home() {
       <div className="panel mt-4 rounded-xl p-4">
         <div className="flex justify-between">
           <span className="font-bold">📈 Market</span>
-          <span className="text-xs text-zinc-500">cash: ${(state.usdCash ?? 0).toFixed(2)} · 1% fee</span>
+          <span className="text-xs text-zinc-400">cash: ${(state.usdCash ?? 0).toFixed(2)} · 1% fee</span>
         </div>
-        <p className="mt-1 text-xs text-zinc-500">Sell $FARM into cash on pumps, buy back on dips.</p>
+        <p className="mt-1 text-xs text-zinc-400">Sell $FARM into cash on pumps, buy back on dips.</p>
         <div className="mt-2 flex gap-2">
           <input value={tradeAmount} onChange={(e) => setTradeAmount(e.target.value)} placeholder="amount (or 'all')" inputMode="decimal"
             className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm outline-none focus:border-emerald-500" />
@@ -442,7 +445,7 @@ export default function Home() {
 
       {/* staking */}
       <div className="panel mt-4 rounded-xl p-4">
-        <div className="flex justify-between"><span className="font-bold">🏦 Staking</span><span className="text-xs text-zinc-500">{(STAKE_APY * 100).toFixed(0)}% APR</span></div>
+        <div className="flex justify-between"><span className="font-bold">🏦 Staking</span><span className="text-xs text-zinc-400">{(STAKE_APY * 100).toFixed(0)}% APR</span></div>
         <div className="mt-2 text-sm">staked: <b>{fmtNum(state.stakedAmount)}</b> $FARM</div>
         <div className="text-sm text-emerald-400">rewards: {fmtNum(stakeRewards(state))}</div>
         <div className="mt-2 flex gap-2">
@@ -458,7 +461,7 @@ export default function Home() {
       <div className={`mt-4 rounded-lg border p-4 ${canPrestige ? "border-purple-600/60 bg-purple-900/10" : "border-zinc-800 bg-zinc-900 opacity-60"}`}>
         <div className="flex justify-between">
           <span className="font-bold">✨ Prestige</span>
-          <span className="text-xs text-zinc-500">{state.prestigePoints} pts · +{((globalMult(state) - 1) * 100).toFixed(0)}% & +{((achMult - 1) * 100).toFixed(0)}% ach.</span>
+          <span className="text-xs text-zinc-400">{state.prestigePoints} pts · +{((globalMult(state) - 1) * 100).toFixed(0)}% & +{((achMult - 1) * 100).toFixed(0)}% ach.</span>
         </div>
         <p className="mt-1 text-xs text-zinc-400">
           Reset coins & upgrades, keep lifetime stats. Each point = +2% forever.
@@ -473,9 +476,9 @@ export default function Home() {
           <button onClick={() => setShowStats(true)} className="border border-zinc-700 rounded px-2 py-1 hover:border-emerald-500">📊 Stats</button>
           <button onClick={shareScore} className="border border-zinc-700 rounded px-2 py-1 hover:border-sky-500">🐦 Share</button>
         </div>
-        <div className="text-center text-xs text-zinc-600">
+        <div className="text-center text-xs text-zinc-400">
           lifetime {fmtNum(state.totalMined)} · clicks {fmtNum(state.clicksTotal)} · goldens {state.goldensClicked} · prestiges {state.prestiges}
-          <span className="block mt-0.5 text-zinc-500">🏆 season ends in {fmtCountdown(msUntilSeasonEnd())} · space = mine</span>
+          <span className="block mt-0.5 text-zinc-400">🏆 season ends in {fmtCountdown(msUntilSeasonEnd())} · space = mine</span>
         </div>
       </div>
 
@@ -566,9 +569,9 @@ export default function Home() {
               <button onClick={submitScore} disabled={!playerName.trim()} className="rounded bg-sky-600/80 px-3 py-1 text-sm hover:bg-sky-600 disabled:opacity-30">Submit</button>
             </div>
             {lbEntries === null ? (
-              <div className="text-sm text-zinc-500 py-4 text-center">loading…</div>
+              <div className="text-sm text-zinc-400 py-4 text-center">loading…</div>
             ) : lbEntries.length === 0 ? (
-              <div className="text-sm text-zinc-500 py-4 text-center">No entries yet — be the first whale 🐋</div>
+              <div className="text-sm text-zinc-400 py-4 text-center">No entries yet — be the first whale 🐋</div>
             ) : (
               lbEntries.map((e, i) => {
                 const isYou = e.name === playerName.trim();
@@ -592,7 +595,7 @@ export default function Home() {
               <div className="font-bold">🧪 Research Lab — {state.prestigePoints} PP available</div>
               <button onClick={() => setShowPerks(false)} className="text-zinc-400">✕</button>
             </div>
-            <p className="text-xs text-zinc-500 mb-2">Spend prestige points on permanent upgrades. Survives prestige resets.</p>
+            <p className="text-xs text-zinc-400 mb-2">Spend prestige points on permanent upgrades. Survives prestige resets.</p>
             {PERKS.map((p) => {
               const lvl = state.perks[p.id] ?? 0;
               const maxed = lvl >= p.maxLevel;
@@ -601,20 +604,20 @@ export default function Home() {
               return (
                 <div key={p.id} className={`py-2 border-b border-zinc-800 last:border-0 flex items-center justify-between ${maxed ? "opacity-60" : ""}`}>
                   <div>
-                    <div className="text-sm">{p.icon} <b>{p.name}</b> <span className="text-zinc-500">Lv.{lvl}/{p.maxLevel}</span></div>
-                    <div className="text-xs text-zinc-500">{p.desc}</div>
+                    <div className="text-sm">{p.icon} <b>{p.name}</b> <span className="text-zinc-400">Lv.{lvl}/{p.maxLevel}</span></div>
+                    <div className="text-xs text-zinc-400">{p.desc}</div>
                   </div>
                   <button
                     onClick={() => buyPerk(p.id, p.maxLevel, cost)}
                     disabled={maxed || !afford}
-                    className={`ml-3 shrink-0 rounded px-3 py-1 text-sm ${maxed ? "border border-zinc-700 text-zinc-500" : "bg-purple-600/80 enabled:hover:bg-purple-600 disabled:opacity-30"}`}
+                    className={`ml-3 shrink-0 rounded px-3 py-1 text-sm ${maxed ? "border border-zinc-700 text-zinc-400" : "bg-purple-600/80 enabled:hover:bg-purple-600 disabled:opacity-30"}`}
                   >
                     {maxed ? "MAX" : `${cost} PP`}
                   </button>
                 </div>
               );
             })}
-            <div className="mt-2 text-xs text-zinc-500">
+            <div className="mt-2 text-xs text-zinc-400">
               Current: APY {(effectiveApy(state) * 100).toFixed(0)}% · offline cap {Math.round(offlineCap(state) / 3600000)}h
             </div>
           </div>
@@ -634,13 +637,14 @@ export default function Home() {
               return (
                 <div key={a.id} className={`py-1.5 border-b border-zinc-800 last:border-0 ${done ? "" : "opacity-40"}`}>
                   <div className="text-sm">{done ? "✅" : "⬜"} <b>{a.name}</b></div>
-                  <div className="text-xs text-zinc-500 ml-6">{a.desc}</div>
+                  <div className="text-xs text-zinc-400 ml-6">{a.desc}</div>
                 </div>
               );
             })}
           </div>
         </div>
       )}
+      </div>{/* end z-10 content wrapper */}
     </main>
   );
 }

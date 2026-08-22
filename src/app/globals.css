@@ -112,10 +112,26 @@
   0% { transform: translateX(-120%) skewX(-20deg); }
   100% { transform: translateX(240%) skewX(-20deg); }
 }
+.sheen { position: relative; overflow: hidden; }
 .sheen::after {
   content: "";
   position: absolute;
   top: 0; bottom: 0; width: 34%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
-  animation: sheen 2.8s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
+  animation: sheen 3.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* fix: force light text everywhere on dark theme */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+.app-bg {
+  color-scheme: dark;
+  color: #f4f4f5 !important;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace !important;
+}
+.app-bg, .app-bg * {
+  -webkit-font-smoothing: antialiased;
 }
