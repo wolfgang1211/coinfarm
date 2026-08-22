@@ -13,6 +13,7 @@ import { PERKS, perkCost, PerkId } from "@/lib/perks";
 import { effectiveApy, offlineCap } from "@/lib/game";
 import { sfx, setMuted, isMuted } from "@/lib/sfx";
 import { msUntilSeasonEnd, fmtCountdown } from "@/lib/season";
+import { GEN_ART } from "@/components/gen-art";
 
 const SAVE_KEY = "coinfarm-save-v2";
 
@@ -393,23 +394,31 @@ export default function Home() {
             const share = (contributions[idx] / total) * 100;
             return (
               <div key={def.id} className={`gen-card card-${def.id} rounded-xl p-3 ${afford ? "affordable" : "opacity-50"}`}>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="font-bold" style={{ color: `rgb(var(--accent))` }}>{def.icon} {def.name}</div>
-                    <div className="text-xs text-zinc-500">
-                      owned {owned} · {fmtNum(def.rate * Math.pow(2, Math.floor(owned / 25)))}/s each · milestone in {toNextMilestone}
+                <div className="flex gap-3">
+                  {/* pixel art */}
+                  <div className="shrink-0 w-16 h-12 rounded-lg bg-black/40 border border-white/5 flex items-center justify-center overflow-hidden">
+                    {(() => { const Art = GEN_ART[def.id]; return <Art className="w-full h-full" />; })()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-bold text-sm" style={{ color: `rgb(var(--accent))` }}>{def.name}</div>
+                        <div className="text-xs text-zinc-500">
+                          owned {owned} · {fmtNum(def.rate * Math.pow(2, Math.floor(owned / 25)))}/s ea · milestone -{toNextMilestone}
+                        </div>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={() => buyUpgrade(def.id, 1)} disabled={!afford} className="rounded bg-zinc-800/90 px-2 py-1 text-sm enabled:hover:bg-zinc-700">{fmtNum(cost)} 🪙</button>
+                        <button onClick={() => buyUpgrade(def.id, 10)} disabled={state.coins < bulkCost(def.id, owned, 10)} className="rounded border border-zinc-600 px-2 py-1 text-sm enabled:hover:border-emerald-500">x10</button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => buyUpgrade(def.id, 1)} disabled={!afford} className="rounded bg-zinc-800/90 px-2 py-1 text-sm enabled:hover:bg-zinc-700">{fmtNum(cost)} 🪙</button>
-                    <button onClick={() => buyUpgrade(def.id, 10)} disabled={state.coins < bulkCost(def.id, owned, 10)} className="rounded border border-zinc-600 px-2 py-1 text-sm enabled:hover:border-emerald-500">x10</button>
+                    {/* production share bar */}
+                    <div className="mt-1.5 h-1.5 rounded bg-zinc-800/80 overflow-hidden">
+                      <div className="share-bar h-full rounded-full transition-all duration-500" style={{ width: `${share}%` }} />
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-zinc-600">{share.toFixed(0)}% of your hashpower</div>
                   </div>
                 </div>
-                {/* production share bar */}
-                <div className="mt-2 h-1.5 rounded bg-zinc-800/80 overflow-hidden">
-                  <div className="share-bar h-full rounded-full transition-all duration-500" style={{ width: `${share}%` }} />
-                </div>
-                <div className="mt-0.5 text-[10px] text-zinc-600">{share.toFixed(0)}% of your hashpower</div>
               </div>
             );
           });
