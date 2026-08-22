@@ -6,9 +6,9 @@ import {
   passiveRate, clickValue, stakeRewards, rollCrit, CRIT_MULT, isFrenzy,
   prestigeGain, doPrestige, PRESTIGE_UNLOCK, globalMult, achievementMult,
   shouldSpawnGolden, pickGoldenKind, applyGolden, newAchievements,
-  ACHIEVEMENTS, UPGRADE_DEFS, UpgradeId, STAKE_APY, fmtNum, GoldenKind,
+  ACHIEVEMENTS, UPGRADE_DEFS, UpgradeId, fmtNum, GoldenKind,
 } from "@/lib/game";
-import { executeTrade, checkDailyBonus, dailyAvailable, fmtShort } from "@/lib/wave2";
+import { executeTrade, checkDailyBonus, dailyAvailable } from "@/lib/wave2";
 import { PERKS, perkCost, PerkId } from "@/lib/perks";
 import { effectiveApy, offlineCap } from "@/lib/game";
 import { sfx, setMuted, isMuted } from "@/lib/sfx";
@@ -33,20 +33,20 @@ let floatId = 0;
 export default function Home() {
   const [state, setState] = useState<GameState | null>(null);
   const [stakeInput, setStakeInput] = useState("");
+  const [tradeAmount, setTradeAmount] = useState("");
   const [floats, setFloats] = useState<FloatText[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [golden, setGolden] = useState<{ x: number; y: number } | null>(null);
   const [showAchievements, setShowAchievements] = useState(false);
-  const [offlineReport, setOfflineReport] = useState<string | null>(null);
-  const [tradeAmount, setTradeAmount] = useState("");
-  const [dailyClaimable, setDailyClaimable] = useState(false);
   const [showPerks, setShowPerks] = useState(false);
-  const [muteState, setMuteState] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [lbEntries, setLbEntries] = useState<{ name: string; totalMined: number; prestiges: number; achievements: number; rank?: number }[] | null>(null);
-  const [playerName, setPlayerName] = useState("");
   const [showStats, setShowStats] = useState(false);
+  const [lbEntries, setLbEntries] = useState<{ name: string; totalMined: number; prestiges: number; achievements: number }[] | null>(null);
+  const [playerName, setPlayerName] = useState("");
   const [lbScope, setLbScope] = useState<"all" | "season">("season");
+  const [dailyClaimable, setDailyClaimable] = useState(false);
+  const [offlineReport, setOfflineReport] = useState<string | null>(null);
+  const [muteState, setMuteState] = useState(false);
   const stateRef = useRef(state);
   stateRef.current = state;
   const mineBtnRef = useRef<HTMLButtonElement>(null);
@@ -57,36 +57,32 @@ export default function Home() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
   }, []);
 
-  // init
   useEffect(() => {
     const loaded = loadGame();
     const { state: caught, offlineMs } = tick(loaded);
     setState(caught);
     if (offlineMs > 60_000) {
       const mins = Math.floor(offlineMs / 60000);
-      setOfflineReport(`While you were away (${mins >= 60 ? Math.floor(mins / 60) + "h " : ""}${mins % 60}m), your rigs kept mining at 50% efficiency.`);
+      setOfflineReport(`Your rigs kept running for ${mins >= 60 ? Math.floor(mins / 60) + "h " : ""}${mins % 60}m at 50% efficiency.`);
     }
   }, []);
 
-  // game loop
   useEffect(() => {
     const iv = setInterval(() => {
       setState((s) => {
         if (!s) return s;
         const { state: next } = tick(s);
         setDailyClaimable(dailyAvailable(next));
-        // golden spawn check
         if (!golden && shouldSpawnGolden(next)) {
-          setGolden({ x: 8 + Math.random() * 70, y: 15 + Math.random() * 70 });
+          setGolden({ x: 8 + Math.random() * 70, y: 15 + Math.random() * 65 });
           next.lastGoldenSpawn = Date.now();
         }
-        // achievements check
         const newly = newAchievements(next);
         if (newly.length > 0) {
           next.achievements = [...next.achievements, ...newly];
           for (const id of newly) {
             const def = ACHIEVEMENTS.find((a) => a.id === id);
-            if (def) pushToast(`🏆 ${def.name} — ${def.desc} (+1% global)`);
+            if (def) pushToast(`🏆 ${def.name} — +1% global`);
           }
           sfx.achievement();
         }
@@ -96,7 +92,6 @@ export default function Home() {
     return () => clearInterval(iv);
   }, [golden, pushToast]);
 
-  // autosave
   useEffect(() => {
     const iv = setInterval(() => {
       if (stateRef.current)
@@ -108,21 +103,33 @@ export default function Home() {
   const addFloat = useCallback((text: string, crit: boolean) => {
     const id = ++floatId;
     const rect = mineBtnRef.current?.getBoundingClientRect();
-    const x = rect ? rect.left + Math.random() * rect.width : 200;
-    const y = rect ? rect.top + 20 : 300;
+    const x = rect ? Math.min(rect.left + Math.random() * rect.width * 0.7, window.innerWidth - 90) : 200;
+    const y = rect ? rect.top + 24 : 300;
     setFloats((f) => [...f.slice(-14), { id, x, y, text, crit }]);
     setTimeout(() => setFloats((f) => f.filter((x2) => x2.id !== id)), 1000);
   }, []);
 
   const doMine = () => {
     if (!state) return;
-    const crit = rollCrit();
+    const crit = rollCrit(state);
     let v = clickValue(state);
     if (crit) v *= CRIT_MULT;
     setState((s) => s ? { ...s, coins: s.coins + v, totalMined: s.totalMined + v, runMined: s.runMined + v, clicksTotal: s.clicksTotal + 1, critCount: s.critCount + (crit ? 1 : 0) } : s);
     if (crit) sfx.crit(); else sfx.click();
     addFloat(`+${fmtNum(v)}${crit ? " CRIT!" : ""}`, crit);
   };
+
+  // space to mine
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !(e.target instanceof HTMLInputElement)) {
+        e.preventDefault();
+        doMine();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   const clickGolden = () => {
     if (!state || !golden) return;
@@ -140,16 +147,11 @@ export default function Home() {
       const cost = n === 1 ? upgradeCost(id, s.upgrades[id]) : bulkCost(id, s.upgrades[id], n);
       if (s.coins < cost) return s;
       const newOwned = s.upgrades[id] + n;
-      // milestone celebration: crossed a 25-boundary
-      const before = Math.floor(s.upgrades[id] / 25);
-      const after = Math.floor(newOwned / 25);
-      let milestoneMsg: string | null = null;
-      if (after > before) {
+      if (Math.floor(newOwned / 25) > Math.floor(s.upgrades[id] / 25)) {
         const def = UPGRADE_DEFS.find((d) => d.id === id)!;
-        milestoneMsg = `🌟 MILESTONE! ${def.name} output x${Math.pow(2, after)}!`;
-        setTimeout(() => sfx.achievement(), 50);
+        pushToast(`🌟 MILESTONE! ${def.name} output ×${Math.pow(2, Math.floor(newOwned / 25))}`);
+        sfx.achievement();
       }
-      if (milestoneMsg) pushToast(milestoneMsg);
       return { ...s, coins: s.coins - cost, upgrades: { ...s.upgrades, [id]: newOwned } };
     });
     sfx.buy();
@@ -162,6 +164,7 @@ export default function Home() {
       if (s.coins < cost) return s;
       return { ...s, coins: s.coins - cost, perClickLevel: s.perClickLevel + 1 };
     });
+    sfx.buy();
   };
 
   const doStake = (all = false) => {
@@ -179,18 +182,8 @@ export default function Home() {
     setState((s) => {
       if (!s || s.stakedAmount <= 0) return s;
       const now = Date.now();
-      const total = s.stakedAmount + stakeRewards(s, now);
-      return { ...s, coins: s.coins + total, totalMined: s.totalMined + stakeRewards(s, now), runMined: s.runMined + stakeRewards(s, now), stakedAmount: 0, pendingRewards: 0, stakeStartTime: now };
-    });
-  };
-
-  const prestige = () => {
-    setState((s) => {
-      if (!s) return s;
-      const next = doPrestige(s);
-      if (!next) return s;
-      pushToast(`✨ Prestiged! +${prestigeGain(s)} points → +${((globalMult(next) - 1) * 100).toFixed(0)}% permanent boost`);
-      return next;
+      const rewards = stakeRewards(s, now);
+      return { ...s, coins: s.coins + s.stakedAmount + rewards, totalMined: s.totalMined + rewards, runMined: s.runMined + rewards, stakedAmount: 0, pendingRewards: 0, stakeStartTime: now };
     });
   };
 
@@ -198,9 +191,9 @@ export default function Home() {
     setState((s) => {
       if (!s) return s;
       let amount = parseFloat(tradeAmount);
-      if (side === "sell" && tradeAmount === "all") amount = s.coins;
+      if (side === "sell" && tradeAmount.toLowerCase() === "all") amount = s.coins;
       const { state: next, message } = executeTrade(s, side, amount);
-      pushToast(next ? (side === "sell" ? "💸 " : "🛒 ") + message : "❌ " + message);
+      pushToast(next ? message : "❌ " + message);
       return next ?? s;
     });
     setTradeAmount("");
@@ -209,11 +202,23 @@ export default function Home() {
   const claimDaily = () => {
     setState((s) => {
       if (!s) return s;
-      const result = checkDailyBonus(s);
-      if (!result) return s;
-      pushToast(`📅 Daily bonus day ${result.streak}: +${fmtNum(result.reward)} $FARM!`);
+      const r = checkDailyBonus(s);
+      if (!r) return s;
+      pushToast(`📅 Day ${r.streak} streak: +${fmtNum(r.reward)} $FARM`);
       setDailyClaimable(false);
-      return result.state;
+      return r.state;
+    });
+    sfx.golden();
+  };
+
+  const prestige = () => {
+    setState((s) => {
+      if (!s) return s;
+      const next = doPrestige(s);
+      if (!next) return s;
+      pushToast(`✨ Prestiged! +${prestigeGain(s)} pts → +${((globalMult(next) / (1 + next.prestigePoints * 0)) - 1).toFixed(0)} boost`);
+      sfx.prestige();
+      return next;
     });
   };
 
@@ -225,36 +230,13 @@ export default function Home() {
       pushToast("🧪 Research complete!");
       return { ...s, prestigePoints: s.prestigePoints - cost, perks: { ...s.perks, [id]: lvl + 1 } };
     });
-  };
-
-  // keyboard shortcut: space mines (when no input focused)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !(e.target instanceof HTMLInputElement)) {
-        e.preventDefault();
-        doMine();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
-  const shareScore = async () => {
-    const s = stateRef.current;
-    if (!s) return;
-    const text = `⛏ I've mined ${fmtNum(s.totalMined)} $FARM (${s.prestiges} prestiges, ${s.achievements.length} achievements) in CoinFarm! Can you beat me?`;
-    const url = "https://coinfarm.vercel.app";
-    if (navigator.share) {
-      try { await navigator.share({ text, url }); return; } catch {}
-    }
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text + " " + url)}`, "_blank");
+    sfx.buy();
   };
 
   const openLeaderboard = async (scope: "all" | "season" = lbScope) => {
     setShowLeaderboard(true);
     try {
-      const savedName = localStorage.getItem("coinfarm-name") ?? "";
-      setPlayerName(savedName);
+      setPlayerName(localStorage.getItem("coinfarm-name") ?? "");
       const res = await fetch(`/api/leaderboard?scope=${scope}`);
       const data = await res.json();
       setLbEntries(data.top ?? []);
@@ -267,159 +249,147 @@ export default function Home() {
     localStorage.setItem("coinfarm-name", playerName.trim());
     try {
       const res = await fetch("/api/leaderboard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: playerName.trim(), totalMined: Math.floor(s.totalMined), prestiges: s.prestiges, achievements: s.achievements, createdAt: s.createdAt }),
       });
       const data = await res.json();
-      if (data.ok) pushToast(`📡 Submitted! #${data.rank} all-time · #${data.seasonRank ?? "?"} this season`);
-      else pushToast(`❌ ${data.error}`);
+      pushToast(data.ok ? `📡 #${data.rank} all-time · #${data.seasonRank ?? "?"} season` : `❌ ${data.error}`);
       openLeaderboard();
     } catch { pushToast("❌ Submit failed"); }
   };
 
-  // chart
+  const shareScore = async () => {
+    const s = stateRef.current;
+    if (!s) return;
+    const text = `⛏ I've mined ${fmtNum(s.totalMined)} $FARM (${s.prestiges} prestiges) in CoinFarm! Can you beat me?`;
+    const url = "https://coinfarm.vercel.app";
+    if (navigator.share) { try { await navigator.share({ text, url }); return; } catch {} }
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text + " " + url)}`, "_blank");
+  };
+
+  // chart with area fill + current price chip
   const chart = (() => {
     if (!state || state.priceHistory.length < 2) return null;
     const h = state.priceHistory.slice(-120);
     const min = Math.min(...h), max = Math.max(...h);
     const range = max - min || 1;
-    const W = 280, H = 56;
+    const W = 340, H = 64;
     const up = h[h.length - 1] >= h[0];
-    const color = up ? "#22c55e" : "#ef4444";
-    const pts = h.map((p, i) => `${((i / (h.length - 1)) * W).toFixed(1)},${(H - ((p - min) / range) * H).toFixed(1)}`).join(" ");
+    const c = up ? "#34d399" : "#f87171";
+    const pts = h.map((p, i) => `${((i / (h.length - 1)) * W).toFixed(1)},${(H - 4 - ((p - min) / range) * (H - 8)).toFixed(1)}`);
     return (
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-14 mt-1">
-        <polyline points={pts} fill="none" stroke={color} strokeWidth="2" />
-      </svg>
+      <div className="chart-wrap mt-3">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full block" style={{ height: 64 }}>
+          <defs>
+            <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={c} stopOpacity="0.22" />
+              <stop offset="100%" stopColor={c} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <polygon points={`0,${H} ${pts.join(" ")} ${W},${H}`} fill="url(#area)" />
+          <polyline points={pts.join(" ")} fill="none" stroke={c} strokeWidth="1.8" strokeLinejoin="round" />
+          <circle cx={W} cy={parseFloat(pts[pts.length - 1].split(",")[1])} r="2.6" fill={c} />
+        </svg>
+        <span className="chart-current absolute top-1.5 right-1.5 font-bold" style={{ color: c }}>
+          ${state.price.toFixed(3)}
+        </span>
+      </div>
     );
   })();
 
-  if (!state) return <main className="min-h-screen bg-zinc-950 text-zinc-100" />;
+  if (!state) return <main className="app-bg" />;
 
   const gain = prestigeGain(state);
   const canPrestige = gain > 0;
-  const achMult = achievementMult(state);
   const frenzy = isFrenzy(state);
   const boosted = Date.now() < state.boostUntil;
+  const priceUp = state.priceHistory.length > 1 && state.price >= state.priceHistory[state.priceHistory.length - 2];
 
   return (
-    <main className="relative min-h-screen app-bg text-zinc-100 p-4 max-w-md mx-auto font-mono select-none overflow-x-hidden">
-      {/* ambient orbs — fixed layer, no layout impact */}
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="orb w-64 h-64 bg-emerald-500/15" style={{ top: "-40px", left: "-60px" }} />
-        <div className="orb w-52 h-52 bg-violet-500/12" style={{ top: "30%", right: "-70px", animationDelay: "-4s" }} />
-        <div className="orb w-56 h-56 bg-amber-500/10" style={{ bottom: "5%", left: "-50px", animationDelay: "-8s" }} />
-      </div>
-      <div className="relative z-10">
-
-      {/* header */}
-      <div className="relative flex justify-between items-center">
-        <h1 className="text-xl font-bold tracking-tight">
-          <span className="pick-swing mr-0.5">⛏</span> Coin<span className="text-emerald-400">Farm</span> <span className="text-xs text-zinc-400 font-normal">idle miner</span>
+    <main className="app-bg px-4 pb-10 pt-5 max-w-md mx-auto select-none">
+      {/* ===== header ===== */}
+      <header className="flex items-center justify-between mb-4">
+        <h1 className="font-display text-lg font-extrabold tracking-tight">
+          <span className="pick-swing inline-block mr-1">⛏</span>
+          Coin<span className="text-emerald-400">Farm</span>
         </h1>
-        <button onClick={() => setShowAchievements(!showAchievements)} className="text-sm border border-zinc-700 rounded px-2 py-1 hover:border-emerald-500">
-          🏆 {state.achievements.length}/{ACHIEVEMENTS.length}
-        </button>
-        <button onClick={() => setShowPerks(!showPerks)} className="ml-1 text-sm border border-purple-700 rounded px-2 py-1 hover:border-purple-400">
-          🧪 {state.prestigePoints} PP
-        </button>
-        <button onClick={() => openLeaderboard()} className="ml-1 text-sm border border-sky-700 rounded px-2 py-1 hover:border-sky-400">
-          📡 Top
-        </button>
-        <button
-          onClick={() => { const m = !isMuted(); setMuted(m); setMuteState(m); }}
-          className="ml-1 text-sm border border-zinc-700 rounded px-2 py-1 hover:border-zinc-500"
-        >
-          {muteState ? "🔇" : "🔊"}
-        </button>
-      </div>
+        <nav className="flex gap-1.5">
+          <button onClick={() => setShowAchievements(true)} className="topbar-btn">🏆 {state.achievements.length}<span className="opacity-50">/{ACHIEVEMENTS.length}</span></button>
+          <button onClick={() => setShowPerks(true)} className="topbar-btn">🧪 {state.prestigePoints} PP</button>
+          <button onClick={() => openLeaderboard()} className="topbar-btn">📡</button>
+          <button onClick={() => { const m = !isMuted(); setMuted(m); setMuteState(m); }} className="topbar-btn">{muteState ? "🔇" : "🔊"}</button>
+        </nav>
+      </header>
 
-      {/* balance */}
-      <div className={`relative panel mt-3 rounded-xl p-4 text-center transition-colors ${boosted ? "border-yellow-500/60" : ""}`}>
-        <div className="text-3xl font-bold animate-coinglow">
-          <span className="mr-1">🪙</span>{fmtNum(state.coins)} <span className="text-emerald-400">$FARM</span>
+      {/* ===== balance hero ===== */}
+      <section className="balance-hero p-5">
+        <div className="flex items-center justify-center gap-3">
+          <span className="coin-badge">$</span>
+          <div className="text-left">
+            <div className="animate-coinglow font-display text-[32px] leading-none font-extrabold tabular-nums">{fmtNum(state.coins)}</div>
+            <div className="sec-label mt-1">$FARM balance</div>
+          </div>
         </div>
-        {boosted && <div className="text-xs text-yellow-400 animate-pulse">⚡ SURGE x{state.boostMult} active</div>}
-        <div className={`mt-1 text-sm ${state.priceHistory.length > 1 && state.price >= state.priceHistory[state.priceHistory.length - 2] ? "text-green-400" : "text-red-400"}`}>
-          ${state.price.toFixed(3)}
-        </div>
+
         {chart}
-        <div className="mt-1 text-xs text-zinc-400">
-          portfolio ≈ ${fmtNum((state.coins + state.stakedAmount) * state.price)} · passive {fmtNum(passiveRate(state))}/s
-        </div>
-      </div>
 
-      {/* boosts bar */}
-      {(frenzy || boosted) && (
-        <div className={`mt-2 rounded py-1.5 text-center text-sm font-bold ${frenzy ? "bg-red-600/30 text-red-300" : "bg-yellow-600/20 text-yellow-300"}`}>
-          {frenzy && `🔥 FRENZY x${state.frenzyMult} · ${Math.ceil((state.frenzyUntil - Date.now()) / 1000)}s `}
-          {!frenzy && boosted && `⚡ x${state.boostMult} · ${Math.ceil((state.boostUntil - Date.now()) / 1000)}s`}
+        <div className="mt-2 flex items-center justify-between text-xs">
+          <span className="text-zinc-400">portfolio <b className="text-zinc-200">${fmtNum((state.coins + state.stakedAmount) * state.price)}</b></span>
+          <span className="text-zinc-400">passive <b className="text-emerald-400">{fmtNum(passiveRate(state))}/s</b></span>
         </div>
-      )}
 
-      {/* click */}
-      <button
-        ref={mineBtnRef}
-        onClick={doMine}
-        className={`mine-btn ${frenzy ? "mine-btn-frenzy" : ""} relative overflow-hidden sheen mt-3 w-full rounded-xl py-4 text-lg font-bold`}
-      >
-        <span className="pick-swing inline-block mr-1">⛏</span> MINE +{fmtNum(clickValue(state))}
-        <span className="block text-[10px] text-emerald-200/60 font-normal">5% chance of 7× critical hit</span>
+        {(boosted || frenzy) && (
+          <div className={`mt-3 rounded-xl py-2 text-center text-sm font-bold ${frenzy ? "bg-red-500/20 text-red-300" : "bg-yellow-500/15 text-yellow-300"}`}>
+            {frenzy ? `🔥 FRENZY ×${state.frenzyMult} · ${Math.ceil((state.frenzyUntil - Date.now()) / 1000)}s` : `⚡ SURGE ×${state.boostMult} · ${Math.ceil((state.boostUntil - Date.now()) / 1000)}s`}
+          </div>
+        )}
+      </section>
+
+      {/* ===== mine ===== */}
+      <button ref={mineBtnRef} onClick={doMine} className={`mine-btn sheen mt-4 w-full block text-white ${frenzy ? "mine-btn-frenzy" : ""}`}>
+        <span className="pick-swing text-3xl block mb-1">⛏️</span>
+        <span className="mine-amount">+{fmtNum(clickValue(state))}</span>
+        <span className="block text-[11px] opacity-80 mt-1 font-semibold tracking-wide">TAP TO MINE · 5% ×7 CRIT</span>
+      </button>
+
+      <button onClick={buyClickLevel} disabled={state.coins < upgradeClickCost(state.perClickLevel)} className="sub-action mt-2">
+        <span>⛏️ Pick Lv.{state.perClickLevel} → {state.perClickLevel + 1}</span>
+        <span className="tabular-nums">{fmtNum(upgradeClickCost(state.perClickLevel))} 🪙</span>
       </button>
 
       {/* floating numbers */}
       {floats.map((f) => (
-        <span key={f.id} style={{ left: f.x, top: f.y }} className={`pointer-events-none fixed z-50 animate-floatup font-bold ${f.crit ? "text-yellow-300 text-2xl" : "text-emerald-300 text-lg"}`}>
-          {f.text}
-        </span>
+        <span key={f.id} className={`float-num ${f.crit ? "float-crit" : "float-normal"}`} style={{ left: f.x, top: f.y }}>{f.text}</span>
       ))}
 
-      <div className="flex gap-2 mt-2">
-        <button onClick={buyClickLevel} disabled={state.coins < upgradeClickCost(state.perClickLevel)} className="flex-1 rounded border border-zinc-700 py-1.5 text-sm disabled:opacity-30 hover:border-zinc-500">
-          ⛏️ Pick Lv.{state.perClickLevel}→{state.perClickLevel + 1} — {fmtNum(upgradeClickCost(state.perClickLevel))} 🪙
-        </button>
-      </div>
-
-      {/* upgrades */}
-      <div className="mt-4 space-y-2">
+      {/* ===== generators ===== */}
+      <div className="sec-label mt-6 mb-2 pl-1">⛏️ Mining hardware</div>
+      <div className="space-y-2">
         {(() => {
-          const contributions = UPGRADE_DEFS.map((def) => {
-            const owned = state.upgrades[def.id];
-            return def.rate * owned * Math.pow(2, Math.floor(owned / 25));
-          });
+          const contributions = UPGRADE_DEFS.map((def) => def.rate * state.upgrades[def.id] * Math.pow(2, Math.floor(state.upgrades[def.id] / 25)));
           const total = contributions.reduce((a, b) => a + b, 0) || 1;
           return UPGRADE_DEFS.map((def, idx) => {
             const owned = state.upgrades[def.id];
             const cost = upgradeCost(def.id, owned);
             const afford = state.coins >= cost;
-            const toNextMilestone = 25 - (owned % 25);
             const share = (contributions[idx] / total) * 100;
+            const Art = GEN_ART[def.id];
             return (
-              <div key={def.id} className={`gen-card card-${def.id} rounded-xl p-3 ${afford ? "affordable" : "opacity-50"}`}>
+              <div key={def.id} className={`gen-card card-${def.id} p-3 ${afford ? "affordable" : ""}`}>
                 <div className="flex gap-3">
-                  {/* pixel art */}
-                  <div className="shrink-0 w-16 h-12 rounded-lg bg-black/40 border border-white/5 flex items-center justify-center overflow-hidden">
-                    {(() => { const Art = GEN_ART[def.id]; return <Art className="w-full h-full" />; })()}
-                  </div>
+                  <div className="gen-art-frame"><Art className="w-full h-full" /></div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-bold text-sm" style={{ color: `rgb(var(--accent))` }}>{def.name}</div>
-                        <div className="text-xs text-zinc-400">
-                          owned {owned} · {fmtNum(def.rate * Math.pow(2, Math.floor(owned / 25)))}/s ea · milestone -{toNextMilestone}
-                        </div>
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="min-w-0">
+                        <div className="gen-name truncate">{def.name} <span className="text-zinc-500 font-normal">×{owned}</span></div>
+                        <div className="gen-meta">{fmtNum(def.rate * Math.pow(2, Math.floor(owned / 25)))}/s each · milestone in {25 - (owned % 25)}</div>
                       </div>
                       <div className="flex gap-1 shrink-0">
-                        <button onClick={() => buyUpgrade(def.id, 1)} disabled={!afford} className="rounded bg-zinc-800/90 px-2 py-1 text-sm enabled:hover:bg-zinc-700">{fmtNum(cost)} 🪙</button>
-                        <button onClick={() => buyUpgrade(def.id, 10)} disabled={state.coins < bulkCost(def.id, owned, 10)} className="rounded border border-zinc-600 px-2 py-1 text-sm enabled:hover:border-emerald-500">x10</button>
+                        <button onClick={() => buyUpgrade(def.id, 1)} disabled={!afford} className="buy-btn">{fmtNum(cost)}</button>
+                        <button onClick={() => buyUpgrade(def.id, 10)} disabled={state.coins < bulkCost(def.id, owned, 10)} className="buy-btn">×10</button>
                       </div>
                     </div>
-                    {/* production share bar */}
-                    <div className="mt-1.5 h-1.5 rounded bg-zinc-800/80 overflow-hidden">
-                      <div className="share-bar h-full rounded-full transition-all duration-500" style={{ width: `${share}%` }} />
-                    </div>
-                    <div className="mt-0.5 text-[10px] text-zinc-400">{share.toFixed(0)}% of your hashpower</div>
+                    <div className="share-track mt-2"><div className="share-bar" style={{ width: `${share}%` }} /></div>
                   </div>
                 </div>
               </div>
@@ -428,103 +398,171 @@ export default function Home() {
         })()}
       </div>
 
-      {/* market trading */}
-      <div className="panel mt-4 rounded-xl p-4">
-        <div className="flex justify-between">
-          <span className="font-bold">📈 Market</span>
-          <span className="text-xs text-zinc-400">cash: ${(state.usdCash ?? 0).toFixed(2)} · 1% fee</span>
+      {/* ===== market ===== */}
+      <div className="sec-label mt-6 mb-2 pl-1">📈 Market · cash ${(state.usdCash ?? 0).toFixed(2)} · 1% fee</div>
+      <div className="panel p-3">
+        <div className="flex items-center justify-between text-xs mb-2">
+          <span className={priceUp ? "text-emerald-400" : "text-red-400"}>${state.price.toFixed(3)} {priceUp ? "▲" : "▼"}</span>
+          <span className="text-zinc-500">sell pumps · buy dips</span>
         </div>
-        <p className="mt-1 text-xs text-zinc-400">Sell $FARM into cash on pumps, buy back on dips.</p>
-        <div className="mt-2 flex gap-2">
-          <input value={tradeAmount} onChange={(e) => setTradeAmount(e.target.value)} placeholder="amount (or 'all')" inputMode="decimal"
-            className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm outline-none focus:border-emerald-500" />
-          <button onClick={() => trade("sell")} className="rounded bg-red-600/80 px-3 py-1 text-sm hover:bg-red-600">Sell</button>
-          <button onClick={() => trade("buy")} className="rounded bg-sky-600/80 px-3 py-1 text-sm hover:bg-sky-600">Buy</button>
+        <div className="flex gap-1.5">
+          <input value={tradeAmount} onChange={(e) => setTradeAmount(e.target.value)} placeholder="amount or 'all'" inputMode="decimal" className="text-input flex-1 min-w-0" />
+          <button onClick={() => trade("sell")} className="primary-pill sell-pill">Sell</button>
+          <button onClick={() => trade("buy")} className="primary-pill buy-pill">Buy</button>
         </div>
       </div>
 
-      {/* staking */}
-      <div className="panel mt-4 rounded-xl p-4">
-        <div className="flex justify-between"><span className="font-bold">🏦 Staking</span><span className="text-xs text-zinc-400">{(STAKE_APY * 100).toFixed(0)}% APR</span></div>
-        <div className="mt-2 text-sm">staked: <b>{fmtNum(state.stakedAmount)}</b> $FARM</div>
-        <div className="text-sm text-emerald-400">rewards: {fmtNum(stakeRewards(state))}</div>
-        <div className="mt-2 flex gap-2">
-          <input value={stakeInput} onChange={(e) => setStakeInput(e.target.value)} placeholder="amount" inputMode="decimal"
-            className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm outline-none focus:border-emerald-500" />
-          <button onClick={() => doStake(false)} className="rounded bg-emerald-600/80 px-3 py-1 text-sm hover:bg-emerald-600">Stake</button>
-          <button onClick={() => doStake(true)} className="rounded border border-zinc-600 px-2 py-1 text-sm hover:border-emerald-500">All</button>
+      {/* ===== staking ===== */}
+      <div className="sec-label mt-6 mb-2 pl-1">🏦 Staking · {(effectiveApy(state) * 100).toFixed(0)}% APR</div>
+      <div className="panel p-3">
+        <div className="grid grid-cols-2 gap-2 text-center mb-3">
+          <div className="rounded-xl bg-black/30 py-2">
+            <div className="font-display font-bold tabular-nums">{fmtNum(state.stakedAmount)}</div>
+            <div className="sec-label mt-0.5">staked</div>
+          </div>
+          <div className="rounded-xl bg-black/30 py-2">
+            <div className="font-display font-bold tabular-nums text-emerald-400">{fmtNum(stakeRewards(state))}</div>
+            <div className="sec-label mt-0.5">rewards</div>
+          </div>
         </div>
-        <button onClick={unstake} disabled={state.stakedAmount <= 0} className="mt-2 w-full rounded border border-zinc-700 py-1 text-sm disabled:opacity-30 hover:border-emerald-500">Unstake All + Claim</button>
+        <div className="flex gap-1.5">
+          <input value={stakeInput} onChange={(e) => setStakeInput(e.target.value)} placeholder="amount" inputMode="decimal" className="text-input flex-1 min-w-0" />
+          <button onClick={() => doStake(false)} className="primary-pill">Stake</button>
+          <button onClick={() => doStake(true)} className="buy-btn !h-[34px]">All</button>
+        </div>
+        <button onClick={unstake} disabled={state.stakedAmount <= 0} className="sub-action mt-2 !h-[34px] text-xs">Unstake all + claim rewards</button>
       </div>
 
-      {/* prestige */}
-      <div className={`mt-4 rounded-lg border p-4 ${canPrestige ? "border-purple-600/60 bg-purple-900/10" : "border-zinc-800 bg-zinc-900 opacity-60"}`}>
-        <div className="flex justify-between">
-          <span className="font-bold">✨ Prestige</span>
-          <span className="text-xs text-zinc-400">{state.prestigePoints} pts · +{((globalMult(state) - 1) * 100).toFixed(0)}% & +{((achMult - 1) * 100).toFixed(0)}% ach.</span>
-        </div>
-        <p className="mt-1 text-xs text-zinc-400">
-          Reset coins & upgrades, keep lifetime stats. Each point = +2% forever.
+      {/* ===== prestige ===== */}
+      <div className="sec-label mt-6 mb-2 pl-1">✨ Prestige</div>
+      <div className={`panel p-4 ${canPrestige ? "!border-purple-500/40" : ""}`}>
+        <p className="text-xs text-zinc-400 leading-relaxed">
+          Reset this run's coins & hardware. Keep <b className="text-purple-300">{state.prestigePoints} PP</b> forever —
+          each point is <b className="text-purple-300">+6%</b> global, spendable in the Research Lab.
         </p>
-        <button onClick={prestige} disabled={!canPrestige} className="mt-2 w-full rounded bg-purple-600/80 py-2 text-sm font-bold disabled:opacity-40 hover:bg-purple-600">
-          {canPrestige ? `PRESTIGE NOW → +${gain} pts` : `${fmtNum(PRESTIGE_UNLOCK)} run-mined to unlock (${fmtNum(state.runMined)})`}
+        <button onClick={prestige} disabled={!canPrestige}
+          className={`mt-3 w-full rounded-xl py-3 font-display font-extrabold text-white transition-all ${canPrestige ? "perk-btn !w-full !h-auto !py-3" : "bg-white/5 text-zinc-500 cursor-default"}`}
+          style={canPrestige ? {} : { boxShadow: "none" }}>
+          {canPrestige ? `PRESTIGE NOW → +${gain} PP` : `reach ${fmtNum(PRESTIGE_UNLOCK)} mined this run (${fmtNum(state.runMined)})`}
         </button>
       </div>
 
-      <div className="mt-4 mb-8">
-        <div className="flex justify-center gap-2 mb-3 text-xs">
-          <button onClick={() => setShowStats(true)} className="border border-zinc-700 rounded px-2 py-1 hover:border-emerald-500">📊 Stats</button>
-          <button onClick={shareScore} className="border border-zinc-700 rounded px-2 py-1 hover:border-sky-500">🐦 Share</button>
-        </div>
-        <div className="text-center text-xs text-zinc-400">
-          lifetime {fmtNum(state.totalMined)} · clicks {fmtNum(state.clicksTotal)} · goldens {state.goldensClicked} · prestiges {state.prestiges}
-          <span className="block mt-0.5 text-zinc-400">🏆 season ends in {fmtCountdown(msUntilSeasonEnd())} · space = mine</span>
-        </div>
+      {/* ===== footer actions ===== */}
+      <div className="mt-6 flex justify-center gap-2">
+        <button onClick={() => setShowStats(true)} className="topbar-btn">📊 Stats</button>
+        <button onClick={shareScore} className="topbar-btn">🐦 Share</button>
       </div>
+      <p className="footer-note mt-3">
+        lifetime {fmtNum(state.totalMined)} · clicks {fmtNum(state.clicksTotal)} · 🏆 season ends in {fmtCountdown(msUntilSeasonEnd())}
+        <span className="block mt-0.5 opacity-60">space = mine · autosaved locally</span>
+      </p>
 
       {/* daily bonus */}
       {dailyClaimable && (
-        <button onClick={claimDaily} className="fixed top-14 right-4 z-40 rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-3 py-2 text-xs font-bold shadow-lg animate-bounce">
-          📅 DAILY BONUS
-        </button>
+        <button onClick={claimDaily} className="daily-pill fixed top-16 right-4 z-40">📅 DAILY BONUS</button>
       )}
 
       {/* golden event */}
       {golden && (
-        <button onClick={clickGolden}
-          style={{ left: `${golden.x}%`, top: `${golden.y}%` }}
-          className="golden-coin fixed z-40 w-14 h-14 rounded-full flex items-center justify-center text-2xl">
-          💰
-        </button>
+        <button onClick={clickGolden} className="golden-coin" style={{ left: `${golden.x}%`, top: `${golden.y}%` }}>💰</button>
       )}
 
       {/* toasts */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 space-y-1 w-80 max-w-full">
-        {toasts.map((t) => (
-          <div key={t.id} className="rounded bg-zinc-800/95 border border-zinc-600 px-3 py-1.5 text-xs text-center shadow-lg">{t.text}</div>
-        ))}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md space-y-1.5 pointer-events-none">
+        {toasts.map((t) => <div key={t.id} className="toast-item">{t.text}</div>)}
       </div>
 
-      {/* offline report */}
+      {/* offline welcome */}
       {offlineReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setOfflineReport(null)}>
-          <div className="rounded-lg border border-emerald-700 bg-zinc-900 p-5 m-4 max-w-sm text-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="font-bold mb-1">🌙 Welcome back!</div>
-            {offlineReport}
-            <button onClick={() => setOfflineReport(null)} className="mt-3 w-full rounded bg-emerald-600 py-1.5 hover:bg-emerald-500">Collect</button>
+        <div className="sheet-backdrop z-[60]" onClick={() => setOfflineReport(null)}>
+          <div className="welcome-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="font-display font-bold text-base mb-1">🌙 Welcome back</div>
+            <p className="text-zinc-400 text-sm">{offlineReport}</p>
+            <button onClick={() => setOfflineReport(null)} className="primary-pill w-full !h-10 mt-4">Collect</button>
           </div>
         </div>
       )}
 
-      {/* stats panel */}
-      {showStats && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowStats(false)}>
-          <div className="rounded-t-xl sm:rounded-lg panel rounded-t-xl sm:rounded-xl p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-3">
-              <div className="font-bold">📊 Miner Statistics</div>
-              <button onClick={() => setShowStats(false)} className="text-zinc-400">✕</button>
+      {/* ===== sheets ===== */}
+      {showAchievements && (
+        <div className="sheet-backdrop" onClick={() => setShowAchievements(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <SheetHeader title={`🏆 Achievements · +1% each`} onClose={() => setShowAchievements(false)} />
+            {ACHIEVEMENTS.map((a) => {
+              const done = state.achievements.includes(a.id);
+              return (
+                <div key={a.id} className={`sheet-row ${done ? "" : "opacity-40"}`}>
+                  <span>{done ? "✅" : "⬜"} <b className="ml-1">{a.name}</b></span>
+                  <span className="text-xs text-zinc-500 text-right">{a.desc}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {showPerks && (
+        <div className="sheet-backdrop" onClick={() => setShowPerks(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <SheetHeader title={`🧪 Research Lab · ${state.prestigePoints} PP`} onClose={() => setShowPerks(false)} />
+            <p className="text-xs text-zinc-500 mb-2">Permanent upgrades — survive prestige resets.</p>
+            {PERKS.map((p) => {
+              const lvl = state.perks[p.id] ?? 0;
+              const maxed = lvl >= p.maxLevel;
+              const cost = maxed ? 0 : perkCost(p, lvl);
+              return (
+                <div key={p.id} className="sheet-row">
+                  <div>
+                    <div>{p.icon} <b className="ml-1">{p.name}</b> <span className="text-xs text-zinc-500">Lv.{lvl}/{p.maxLevel}</span></div>
+                    <div className="text-xs text-zinc-500">{p.desc}</div>
+                  </div>
+                  <button onClick={() => buyPerk(p.id, p.maxLevel, cost)} disabled={maxed || state.prestigePoints < cost} className="perk-btn shrink-0 ml-3">
+                    {maxed ? "MAX" : `${cost} PP`}
+                  </button>
+                </div>
+              );
+            })}
+            <div className="mt-3 text-xs text-zinc-500">APY {(effectiveApy(state) * 100).toFixed(0)}% · offline cap {Math.round(offlineCap(state) / 3600000)}h</div>
+          </div>
+        </div>
+      )}
+
+      {showLeaderboard && (
+        <div className="sheet-backdrop" onClick={() => setShowLeaderboard(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <SheetHeader title="📡 Leaderboard" onClose={() => setShowLeaderboard(false)} />
+            <div className="flex gap-1.5 mb-3">
+              {(["season", "all"] as const).map((sc) => (
+                <button key={sc} onClick={() => { setLbScope(sc); openLeaderboard(sc); }}
+                  className={`topbar-btn flex-1 justify-center ${lbScope === sc ? "!bg-emerald-600/30 !border-emerald-500/50 text-white" : ""}`}>
+                  {sc === "season" ? "🏆 Season" : "🌍 All-Time"}
+                </button>
+              ))}
             </div>
-            {[
+            <div className="flex gap-1.5 mb-3">
+              <input value={playerName} onChange={(e) => setPlayerName(e.target.value)} placeholder="your miner name" maxLength={20} className="text-input flex-1 min-w-0" />
+              <button onClick={submitScore} disabled={!playerName.trim()} className="primary-pill shrink-0">Submit</button>
+            </div>
+            {lbEntries === null ? <div className="text-sm text-zinc-500 py-6 text-center">loading…</div>
+              : lbEntries.length === 0 ? <div className="text-sm text-zinc-500 py-6 text-center">No entries yet — be the first whale 🐋</div>
+                : lbEntries.map((e, i) => {
+                  const me = e.name === playerName.trim();
+                  return (
+                    <div key={e.name} className={`sheet-row ${me ? "text-emerald-400 font-bold" : ""}`}>
+                      <span>#{i + 1} {e.name}{me && " (you)"}</span>
+                      <span className={me ? "" : "text-zinc-400"}>{fmtNum(e.totalMined)} · P{e.prestiges}</span>
+                    </div>
+                  );
+                })}
+          </div>
+        </div>
+      )}
+
+      {showStats && (
+        <div className="sheet-backdrop" onClick={() => setShowStats(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <SheetHeader title="📊 Miner Statistics" onClose={() => setShowStats(false)} />
+            {([
               ["Lifetime mined", `${fmtNum(state.totalMined)} $FARM`],
               ["This run", `${fmtNum(state.runMined)} $FARM`],
               ["Portfolio value", `$${fmtNum((state.coins + state.stakedAmount) * state.price + (state.usdCash ?? 0))}`],
@@ -538,113 +576,21 @@ export default function Home() {
               ["Daily streak", `${state.dailyStreak ?? 0} days`],
               ["Passive rate", `${fmtNum(passiveRate(state))}/s`],
               ["Playing since", new Date(state.createdAt).toLocaleDateString()],
-            ].map(([k, v]) => (
-              <div key={k} className="flex justify-between py-1.5 border-b border-zinc-800 last:border-0 text-sm">
-                <span className="text-zinc-400">{k}</span><span>{v}</span>
-              </div>
+            ] as [string, string][]).map(([k, v]) => (
+              <div key={k} className="sheet-row"><span className="text-zinc-400">{k}</span><span className="tabular-nums">{v}</span></div>
             ))}
           </div>
         </div>
       )}
-
-      {/* leaderboard panel */}
-      {showLeaderboard && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowLeaderboard(false)}>
-          <div className="panel !border-sky-700/60 rounded-t-xl sm:rounded-xl p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <div className="font-bold">📡 Leaderboard</div>
-              <button onClick={() => setShowLeaderboard(false)} className="text-zinc-400">✕</button>
-            </div>
-            <div className="flex gap-1 mb-2 text-xs">
-              {(["season", "all"] as const).map((sc) => (
-                <button key={sc} onClick={() => { setLbScope(sc); openLeaderboard(sc); }}
-                  className={`rounded px-3 py-1 ${lbScope === sc ? "bg-sky-600/80" : "border border-zinc-700 hover:border-zinc-500"}`}>
-                  {sc === "season" ? "🏆 Weekly Season" : "🌍 All-Time"}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2 mb-3">
-              <input value={playerName} onChange={(e) => setPlayerName(e.target.value)} placeholder="your miner name" maxLength={20}
-                className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm outline-none focus:border-sky-500" />
-              <button onClick={submitScore} disabled={!playerName.trim()} className="rounded bg-sky-600/80 px-3 py-1 text-sm hover:bg-sky-600 disabled:opacity-30">Submit</button>
-            </div>
-            {lbEntries === null ? (
-              <div className="text-sm text-zinc-400 py-4 text-center">loading…</div>
-            ) : lbEntries.length === 0 ? (
-              <div className="text-sm text-zinc-400 py-4 text-center">No entries yet — be the first whale 🐋</div>
-            ) : (
-              lbEntries.map((e, i) => {
-                const isYou = e.name === playerName.trim();
-                return (
-                  <div key={e.name} className={`flex justify-between py-1.5 border-b border-zinc-800 last:border-0 text-sm ${isYou ? "text-emerald-400 font-bold" : ""}`}>
-                    <span>#{i + 1} {e.name} {isYou && "(you)"}</span>
-                    <span className="text-zinc-400">{fmtNum(e.totalMined)} · P{e.prestiges}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* perks / research panel */}
-      {showPerks && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowPerks(false)}>
-          <div className="panel !border-purple-700/60 rounded-t-xl sm:rounded-xl p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <div className="font-bold">🧪 Research Lab — {state.prestigePoints} PP available</div>
-              <button onClick={() => setShowPerks(false)} className="text-zinc-400">✕</button>
-            </div>
-            <p className="text-xs text-zinc-400 mb-2">Spend prestige points on permanent upgrades. Survives prestige resets.</p>
-            {PERKS.map((p) => {
-              const lvl = state.perks[p.id] ?? 0;
-              const maxed = lvl >= p.maxLevel;
-              const cost = maxed ? 0 : perkCost(p, lvl);
-              const afford = !maxed && state.prestigePoints >= cost;
-              return (
-                <div key={p.id} className={`py-2 border-b border-zinc-800 last:border-0 flex items-center justify-between ${maxed ? "opacity-60" : ""}`}>
-                  <div>
-                    <div className="text-sm">{p.icon} <b>{p.name}</b> <span className="text-zinc-400">Lv.{lvl}/{p.maxLevel}</span></div>
-                    <div className="text-xs text-zinc-400">{p.desc}</div>
-                  </div>
-                  <button
-                    onClick={() => buyPerk(p.id, p.maxLevel, cost)}
-                    disabled={maxed || !afford}
-                    className={`ml-3 shrink-0 rounded px-3 py-1 text-sm ${maxed ? "border border-zinc-700 text-zinc-400" : "bg-purple-600/80 enabled:hover:bg-purple-600 disabled:opacity-30"}`}
-                  >
-                    {maxed ? "MAX" : `${cost} PP`}
-                  </button>
-                </div>
-              );
-            })}
-            <div className="mt-2 text-xs text-zinc-400">
-              Current: APY {(effectiveApy(state) * 100).toFixed(0)}% · offline cap {Math.round(offlineCap(state) / 3600000)}h
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* achievements panel */}
-      {showAchievements && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowAchievements(false)}>
-          <div className="rounded-t-xl sm:rounded-lg panel rounded-t-xl sm:rounded-xl p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <div className="font-bold">🏆 Achievements (+1% each)</div>
-              <button onClick={() => setShowAchievements(false)} className="text-zinc-400">✕</button>
-            </div>
-            {ACHIEVEMENTS.map((a) => {
-              const done = state.achievements.includes(a.id);
-              return (
-                <div key={a.id} className={`py-1.5 border-b border-zinc-800 last:border-0 ${done ? "" : "opacity-40"}`}>
-                  <div className="text-sm">{done ? "✅" : "⬜"} <b>{a.name}</b></div>
-                  <div className="text-xs text-zinc-400 ml-6">{a.desc}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      </div>{/* end z-10 content wrapper */}
     </main>
+  );
+}
+
+function SheetHeader({ title, onClose }: { title: string; onClose: () => void }) {
+  return (
+    <div className="flex justify-between items-center mb-3 sticky top-0 bg-[#14161a] pt-1 pb-2 z-10">
+      <div className="font-display font-bold">{title}</div>
+      <button onClick={onClose} className="topbar-btn !px-2.5">✕</button>
+    </div>
   );
 }
