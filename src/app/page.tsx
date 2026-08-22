@@ -12,6 +12,7 @@ import { executeTrade, checkDailyBonus, dailyAvailable, fmtShort } from "@/lib/w
 import { PERKS, perkCost, PerkId } from "@/lib/perks";
 import { effectiveApy, offlineCap } from "@/lib/game";
 import { sfx, setMuted, isMuted } from "@/lib/sfx";
+import { msUntilSeasonEnd, fmtCountdown } from "@/lib/season";
 
 const SAVE_KEY = "coinfarm-save-v2";
 
@@ -447,7 +448,7 @@ export default function Home() {
         </div>
         <div className="text-center text-xs text-zinc-600">
           lifetime {fmtNum(state.totalMined)} · clicks {fmtNum(state.clicksTotal)} · goldens {state.goldensClicked} · prestiges {state.prestiges}
-          <span className="block mt-0.5">space = mine</span>
+          <span className="block mt-0.5 text-zinc-500">🏆 season ends in {fmtCountdown(msUntilSeasonEnd())} · space = mine</span>
         </div>
       </div>
 
