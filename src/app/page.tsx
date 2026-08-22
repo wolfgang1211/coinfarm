@@ -374,28 +374,41 @@ export default function Home() {
 
       {/* upgrades */}
       <div className="mt-4 space-y-2">
-        {UPGRADE_DEFS.map((def) => {
-          const owned = state.upgrades[def.id];
-          const cost = upgradeCost(def.id, owned);
-          const afford = state.coins >= cost;
-          const toNextMilestone = 25 - (owned % 25);
-          return (
-            <div key={def.id} className={`rounded-lg border p-3 ${afford ? "border-zinc-700" : "border-zinc-800 opacity-40"}`}>
-              <div className="flex justify-between items-center">
-                <div>
-                  <div className="font-bold">{def.icon} {def.name}</div>
-                  <div className="text-xs text-zinc-500">
-                    owned {owned} · {fmtNum(def.rate * Math.pow(2, Math.floor(owned / 25)))}/s each · milestone in {toNextMilestone}
+        {(() => {
+          const contributions = UPGRADE_DEFS.map((def) => {
+            const owned = state.upgrades[def.id];
+            return def.rate * owned * Math.pow(2, Math.floor(owned / 25));
+          });
+          const total = contributions.reduce((a, b) => a + b, 0) || 1;
+          return UPGRADE_DEFS.map((def, idx) => {
+            const owned = state.upgrades[def.id];
+            const cost = upgradeCost(def.id, owned);
+            const afford = state.coins >= cost;
+            const toNextMilestone = 25 - (owned % 25);
+            const share = (contributions[idx] / total) * 100;
+            return (
+              <div key={def.id} className={`rounded-lg border p-3 ${afford ? "border-zinc-700" : "border-zinc-800 opacity-40"}`}>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="font-bold">{def.icon} {def.name}</div>
+                    <div className="text-xs text-zinc-500">
+                      owned {owned} · {fmtNum(def.rate * Math.pow(2, Math.floor(owned / 25)))}/s each · milestone in {toNextMilestone}
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => buyUpgrade(def.id, 1)} disabled={!afford} className="rounded bg-zinc-800 px-2 py-1 text-sm enabled:hover:bg-zinc-700">{fmtNum(cost)} 🪙</button>
+                    <button onClick={() => buyUpgrade(def.id, 10)} disabled={state.coins < bulkCost(def.id, owned, 10)} className="rounded border border-zinc-600 px-2 py-1 text-sm enabled:hover:border-emerald-500">x10</button>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => buyUpgrade(def.id, 1)} disabled={!afford} className="rounded bg-zinc-800 px-2 py-1 text-sm enabled:hover:bg-zinc-700">{fmtNum(cost)} 🪙</button>
-                  <button onClick={() => buyUpgrade(def.id, 10)} disabled={state.coins < bulkCost(def.id, owned, 10)} className="rounded border border-zinc-600 px-2 py-1 text-sm enabled:hover:border-emerald-500">x10</button>
+                {/* production share bar */}
+                <div className="mt-2 h-1.5 rounded bg-zinc-800 overflow-hidden">
+                  <div className="h-full bg-emerald-600/70" style={{ width: `${share}%` }} />
                 </div>
+                <div className="mt-0.5 text-[10px] text-zinc-600">{share.toFixed(0)}% of your hashpower</div>
               </div>
-            </div>
-          );
-        })}
+            );
+          });
+        })()}
       </div>
 
       {/* market trading */}
