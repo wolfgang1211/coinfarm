@@ -44,6 +44,7 @@ export default function Home() {
   const [lbEntries, setLbEntries] = useState<{ name: string; totalMined: number; prestiges: number; achievements: number; rank?: number }[] | null>(null);
   const [playerName, setPlayerName] = useState("");
   const [showStats, setShowStats] = useState(false);
+  const [lbScope, setLbScope] = useState<"all" | "season">("season");
   const stateRef = useRef(state);
   stateRef.current = state;
   const mineBtnRef = useRef<HTMLButtonElement>(null);
@@ -247,12 +248,12 @@ export default function Home() {
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text + " " + url)}`, "_blank");
   };
 
-  const openLeaderboard = async () => {
+  const openLeaderboard = async (scope: "all" | "season" = lbScope) => {
     setShowLeaderboard(true);
     try {
       const savedName = localStorage.getItem("coinfarm-name") ?? "";
       setPlayerName(savedName);
-      const res = await fetch("/api/leaderboard");
+      const res = await fetch(`/api/leaderboard?scope=${scope}`);
       const data = await res.json();
       setLbEntries(data.top ?? []);
     } catch { setLbEntries([]); }
@@ -269,7 +270,7 @@ export default function Home() {
         body: JSON.stringify({ name: playerName.trim(), totalMined: Math.floor(s.totalMined), prestiges: s.prestiges, achievements: s.achievements, createdAt: s.createdAt }),
       });
       const data = await res.json();
-      if (data.ok) pushToast(`📡 Score submitted! Rank #${data.rank}`);
+      if (data.ok) pushToast(`📡 Submitted! #${data.rank} all-time · #${data.seasonRank ?? "?"} this season`);
       else pushToast(`❌ ${data.error}`);
       openLeaderboard();
     } catch { pushToast("❌ Submit failed"); }
@@ -313,7 +314,7 @@ export default function Home() {
         <button onClick={() => setShowPerks(!showPerks)} className="ml-1 text-sm border border-purple-700 rounded px-2 py-1 hover:border-purple-400">
           🧪 {state.prestigePoints} PP
         </button>
-        <button onClick={openLeaderboard} className="ml-1 text-sm border border-sky-700 rounded px-2 py-1 hover:border-sky-400">
+        <button onClick={() => openLeaderboard()} className="ml-1 text-sm border border-sky-700 rounded px-2 py-1 hover:border-sky-400">
           📡 Top
         </button>
         <button
@@ -520,8 +521,16 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setShowLeaderboard(false)}>
           <div className="rounded-t-xl sm:rounded-lg border border-sky-700 bg-zinc-900 p-4 max-w-md w-full max-h-[70vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
-              <div className="font-bold">📡 Global Leaderboard</div>
+              <div className="font-bold">📡 Leaderboard</div>
               <button onClick={() => setShowLeaderboard(false)} className="text-zinc-400">✕</button>
+            </div>
+            <div className="flex gap-1 mb-2 text-xs">
+              {(["season", "all"] as const).map((sc) => (
+                <button key={sc} onClick={() => { setLbScope(sc); openLeaderboard(sc); }}
+                  className={`rounded px-3 py-1 ${lbScope === sc ? "bg-sky-600/80" : "border border-zinc-700 hover:border-zinc-500"}`}>
+                  {sc === "season" ? "🏆 Weekly Season" : "🌍 All-Time"}
+                </button>
+              ))}
             </div>
             <div className="flex gap-2 mb-3">
               <input value={playerName} onChange={(e) => setPlayerName(e.target.value)} placeholder="your miner name" maxLength={20}
